@@ -1,4 +1,4 @@
-![image info](./A8MadPascalLibRefBanner.png)
+![image info](./A8MadPasLibRefBanner.png)
 
 # A8 Mad-Pascal Window Library
 Atari 8 Bit Text Mode Windowing Library written in Mad-Pascal.
