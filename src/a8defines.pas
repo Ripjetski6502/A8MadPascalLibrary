@@ -13,7 +13,7 @@ interface
 
 const
     // Version
-    LIB_VERSION = '1.0.0';
+    LIB_VERSION = '1.1.0';
 
     // Window Record and Memory Alloc
     WRECSZ = 10;
