@@ -165,6 +165,7 @@ const
     CHRGT_I = #159;
     CHO_L   = #111;
     CHI_I   = #201;
+    CHDN_I  = #157;
 
 implementation
 

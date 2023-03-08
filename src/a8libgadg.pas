@@ -20,7 +20,7 @@ interface
 // Includes
 // --------------------------------------------------
 uses
-    a8defines, a8defwin;
+    a8defines, a8defwin, a8libmenu;
 
 
 // --------------------------------------------------
@@ -28,9 +28,10 @@ uses
 // --------------------------------------------------
 procedure GAlert(pS: string);
 procedure GProg(bN, x, y, bS: Byte);
-function GButton(bN, x, y, bD, bS: Byte; pA: TStringArray): Byte;
+function GButton(bN, x, y, bO, bD, bS: Byte; pA: TStringArray): Byte;
 function GCheck(bN, x, y, bI, bD: Byte): Byte;
 function GRadio(bN, x, y, bD, bE, bI, bS: Byte; pS: TStringArray): Byte;
+function GCombo(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
 function GSpin(bN, x, y, bL, bM, bI, bE: Byte): Byte;
 function GInput(bN, x, y, bT, bS: Byte; var pS: string): Byte;
 
@@ -96,21 +97,22 @@ end;
 
 
 // ------------------------------------------------------------
-// Func...: GButton(bN, x, y, bD, bS: Byte; pA: TStringArray): Byte
+// Func...: GButton(bN, x, y, bO, bD, bS: Byte; pA: TStringArray): Byte
 // Desc...: Displays buttons and get choice
 // Param..: bN = Window handle number
 //           x = Column of window to place buttons
 //           y = Row of window to place buttons
+//          bO = Orientation of button placement
 //          bD = Initial selected button (0 to display and exit)
 //          bS = Number of buttons
 //          pA = Array of button strings
 // Notes..: Button ornaments should be defined in strings.
 //          Max length of all buttons is 38.
 // ------------------------------------------------------------
-function GButton(bN, x, y, bD, bS: Byte; pA: TStringArray): Byte;
+function GButton(bN, x, y, bO, bD, bS: Byte; pA: TStringArray): Byte;
 var
     bF: Boolean;
-    bL, bK, bP: Byte;
+    bL, bK, xp, yp: Byte;
 begin
     bF := false;
 
@@ -121,22 +123,29 @@ begin
     while not bF do
     begin
         // Set drawing position offset
-        bP := 0;
-
+        xp := 0;
+        yp := 0;
         // Display buttons
         for bL := 0 to bS - 1 do
         begin
             // Display button (inverse if the selected one)
             if Result = bL + 1 then
             begin
-                WPrint(bN, x + bP, y, WON, pA[bL]);
+                WPrint(bN, x + xP, y + yP, WON, pA[bL]);
             end
             else begin
-                WPrint(bN, x + bP, y, WOFF, pA[bL]);
+                WPrint(bN, x + xP, y + yP, WOFF, pA[bL]);   
             end;
 
-            // Increase drawing position by button length
-            Inc(bP, Length(pA[bL]));
+            // Horizontal orientation
+            if bO = GHORZ then
+            begin
+                // Increase drawing position by button length
+                Inc(xP, Length(pA[bL]));
+            end
+            else begin
+                Inc(yP,2);
+            end;
         end;
 
         // If display item is 0, exit
@@ -413,6 +422,134 @@ begin
             end;
         end;
     end;
+end;
+
+// ------------------------------------------------------------
+// Func...: GCombo(bN, x, y, bD, bE, bI, bS: Byte; pS: TStringArray): Byte;
+// Desc...: Display combo and get choice
+// Param..: bN = Window handle number
+//           x = Column of window to place combo
+//           y = Row of window to place combo
+
+//          bE = Edit or display indicator (0 to display and exit)
+//          bI = Initial selected option
+//          bS = Number of options
+//          pS = Pointer to array of combo option strings
+// ------------------------------------------------------------
+function GCombo(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
+var
+    bF, bM: Boolean;
+    bL, bK, bC, xp, yp: Byte;
+begin
+    bF:= false;
+    bM:= false;
+
+    // Set default return and current button to default passed in
+    Result := bI;
+    bC := bI;
+
+    // Loop until exit
+    while not bF do
+    begin
+        // Set drawing position
+        xp := 0;
+        yp := 0;
+
+        WPrint(bN, x + xp, y + yp, WON, pS[bI]);
+        WPos(bN, x + xp + Length(pS[bI]), y + yp);
+        WPut(bN, CHDN_I);
+        // Display options
+        if bM then
+        begin
+            // for bL := 0 to bS - 1 do
+            // begin
+                // If current item then add pointer, else space
+                // WPos(bN, x + xp, y + yp);
+                // if ((bL + 1) = bC) and (bE <> GDISP) then
+                // begin
+                //     // WPut(bN, CHRGT_I);
+                // end
+                // else begin
+                //     // WPut(bN, CHSPACE);
+                // end;
+
+                // // If selected then add filled circle, else unfilled
+                // WPos(bN, x + xp + 1, y + yp);
+                // if bL + 1 = Result then
+                // begin
+                //     // WPut(bN, CHBALL);
+                // end
+                // else begin
+                //     // WPut(bN, CHO_L);
+                // end;
+                MenuV(bN, x, y + 1, WON, bC, bS, pS);
+            // end;
+        end;
+        // If initial item is display only, set exit flag
+        if bE = GDISP then
+        begin
+            bF := true;
+        end
+        // Not display, edit, do it.
+        else begin
+            // Get keystroke
+            bK := WaitKCX(WOFF);
+
+            // Process keystrokes
+            // Up or left
+            if (bK = KLEFT) or (bK = KPLUS) or (bK = KUP) or (bK = KMINUS) then
+            begin
+                // Decrement and check for underrun
+                Dec(bC);
+                if bC < 1 then
+                begin
+                    bC := bS;
+                end;
+            end
+            // Down or right
+            else if (bK = KRIGHT) or (bK = KASTER) or (bK = KDOWN) or (bK = KEQUAL) then
+            begin
+                // Increment and check for overrun
+                Inc(bC);
+                if bC > bS then
+                begin
+                    bC := 1;
+                end;
+            end
+            // ESC
+            else if bK = KESC then
+            begin
+                Result := XESC;
+                bF := true;
+            end
+            // Tab
+            else if bK = KTAB then
+            begin
+                Result := XTAB;
+                bF := true;
+            end
+            // Space
+            // else if bK = KSPACE then
+            // begin
+            //     Result := bC;
+            // end
+            // Enter
+            else if bK = KENTER then
+            begin
+                if not bM then
+                begin
+                    bM:= true;
+                end
+                else begin
+                    Result := bC;
+                    bF := true;
+                end;
+            end;
+        end;
+    end;
+    WPrint(bN, x + xp, y + yp, WOFF, pS[bI]);
+    WPos(bN, x + xp + Length(pS[bI]), y + yp);
+    WPut(bN, CHDN);
 end;
 
 
