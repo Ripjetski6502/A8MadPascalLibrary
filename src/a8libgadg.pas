@@ -1,15 +1,18 @@
 // --------------------------------------------------
 // Library: a8libgadg.pas
 // Desc...: Atari 8 Bit Gadget Library
-// Author.: Wade Ripkowski, amarok
-// Date...: 2022.09
+// Author.: Wade Ripkowski, amarok, MADRAFi
+// Date...: 2023.03
 // License: GNU General Public License v3.0
 // Note...: Requires: a8defines.pas
 //          -Converted from C
 // Require: a8libwin.pas
 //          a8libstr.pas
 //          a8libmisc.pas
+            a8libmenu.pas
 // Revised:
+// - Added orientation parameter to function GButton 
+// - Added GCombo gadget
 // --------------------------------------------------
 
 unit a8libgadg;
@@ -452,11 +455,11 @@ begin
     while not bF do
     begin
         // Set drawing position
-        xp := 0;
-        yp := 0;
+        // xp := 0;
+        // yp := 0;
 
-        WPrint(bN, x + xp, y + yp, WON, pS[bI]);
-        WPos(bN, x + xp + Length(pS[bI]), y + yp);
+        WPrint(bN, x, y + yp, WON, pS[bI]);
+        WPos(bN, x + Length(pS[bI]), y);
         WPut(bN, CHDN_I);
         // Display options
         if bM then
@@ -482,7 +485,7 @@ begin
                 // else begin
                 //     // WPut(bN, CHO_L);
                 // end;
-                MenuV(bN, x, y + 1, WON, bC, bS, pS);
+                bC:=MenuV(bN, x, y + 1, WON, bC, bS, pS);
             // end;
         end;
         // If initial item is display only, set exit flag
@@ -547,8 +550,8 @@ begin
             end;
         end;
     end;
-    WPrint(bN, x + xp, y + yp, WOFF, pS[bI]);
-    WPos(bN, x + xp + Length(pS[bI]), y + yp);
+    WPrint(bN, x, y, WOFF, pS[bI]);
+    WPos(bN, x + Length(pS[bI]), y);
     WPut(bN, CHDN);
 end;
 

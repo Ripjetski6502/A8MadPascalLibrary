@@ -1,8 +1,8 @@
 // --------------------------------------------------
 // Library: a8libmenu.pas
 // Desc...: Atari 8 Bit Menu Library
-// Author.: Wade Ripkowski, amarok
-// Date...: 2022.09
+// Author.: Wade Ripkowski, amarok, MADRAFi
+// Date...: 2023.03
 // License: GNU General Public License v3.0
 // Note...: Requires: a8defines.pas
 //          -Converted from C
@@ -10,6 +10,7 @@
 //          a8libstr.pas
 //          a8libmisc.pas
 // Revised:
+// - Added MenuH to draw menu horizontally
 // --------------------------------------------------
 
 unit a8libmenu;

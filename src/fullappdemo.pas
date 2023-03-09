@@ -1,16 +1,92 @@
 // ------------------------------------------------------------
-// Program: appdemo.pas
+// Program: fullappdemo.pas
 // Desc...: A8 Library Demo Application
-// Author.: Wade Ripkowski, amarok
-// Date...: 20220914
+// Author.: Wade Ripkowski, amarok, MADRAFi
+// Date...: 2023.03
 // License: GNU General Public License v3.0
-// Notes..: mp.exe src\appdemo.pas -ipath:src
-//          mads.exe src\appdemo.a65 -x -i:<MadPascalPath>\base -o:bin\appdemo.xex
+// Notes..: mp.exe src\fullappdemo.pas -ipath:src
+//          mads.exe src\fullappdemo.a65 -x -i:<MadPascalPath>\base -o:bin\fullappdemo.xex
 // ------------------------------------------------------------
 
 // Pull in include files
 uses
     Crt, a8defines, a8defwin, a8libmisc, a8libstr, a8libwin, a8libgadg, a8libmenu;
+
+// Variables
+var
+    bW1, bW2, bC: Byte;
+    bE: Boolean;
+const
+    pcM: array[0..2] of string =
+      (' Main ', ' Sub-Menu ', ' About ');
+
+
+// ------------------------------------------------------------
+// Func...: FileInput: Boolean
+// Desc...: Demo use of input gadgets
+// Returns: TRUE if accepted, else FALSE
+// ------------------------------------------------------------
+function FileInput: Boolean;
+var
+    win_file, win_list, win_drive: Byte;
+    selected, selected_drive: Byte;
+    bM: Byte;
+const
+    menu_drives: array[0..7] of string = ('D1:', 'D2:', 'D3:', 'D4:', 'D5:', 'D6:', 'D7:', 'D8:');
+    buttons : array[0..1] of string = ('[  OK  ]', '[Cancel]');
+
+begin
+    Result:= false;
+    selected_drive:=1;
+
+    win_file:=WOpen(5, 4, 30, 16, WOFF);
+    WOrn(win_file, WPTOP, WPLFT, 'Choose file');
+
+
+    // WPrint(win_file, 1, 8, WOFF, 'Radio Buttons (v)');
+    // GRadio(win_file, 1, 1, GVERT, GDISP, 1, 8, menu_drives);
+
+
+    WPrint(win_file, 15, 2, WOFF, 'Drive');
+    // GCombo(win_file, 15, 3, GDISP, 0, 4, menu_drives);
+    
+
+
+    // selected:=MenuV(win_drive, 1, 1, WOFF, 1, 1, menu_drives);
+    // win_list:=WOpen(7, 5, 14, 10, WOFF);
+    // WOrn(win_list, WPTOP, WPLFT, 'List');
+
+    // WPrint(win_list, 1, 1, WOFF, 'FILE.XEX');
+    // WPrint(win_list, 1, 2, WOFF, 'FILE2.TXT');
+    // WPrint(win_list, 1, 3, WOFF, 'FILE3.DAT');
+
+    GButton(win_file, 19, 11, GVERT, GDISP, 2, buttons);
+    // WaitKCX(WOFF);
+    repeat
+
+        // Drives combo
+        selected:= GCombo(win_file, 15, 3, GEDIT, selected_drive, 8, menu_drives);
+        if (selected <> XESC) and (selected <> XTAB) then
+        begin
+            selected_drive := selected;
+        end;
+        GCombo(win_file, 15, 3, GDISP, selected_drive, 8, menu_drives);
+
+
+        // Buttons to confirm
+        bM := GButton(win_file, 19, 11, GVERT, GEDIT, 2, buttons);    
+        GButton(win_file, 19, 11, GVERT, GDISP, 2, buttons);
+
+    until bM <> XTAB;
+
+    if bM = 1 then
+    begin
+        Result:=true;
+        GAlert('Processing...');
+    end;
+
+      WClose(win_file);
+end;
 
 
 // ------------------------------------------------------------
@@ -238,13 +314,13 @@ var
     iV: Word;
 begin
     // Open status window
-    bW1 := WOpen(9, 2, 20, 14, WOFF);
+    bW1 := WOpen(10, 3, 20, 14, WOFF);
     WOrn(bW1, WPTOP, WPLFT, 'Status');
     WPrint(bW1, 1, 1, WOFF, 'Window Status');
     WPrint(bW1, 1, 2, WOFF, '------ ------');
 
     // Open progress bar window
-    bW2 := WOpen(7, 18, 24, 4, WOFF);
+    bW2 := WOpen(8, 17, 24, 4, WOFF);
     WPrint(bW2, 2, 1, WOFF, 'Progress:');
 
     // Display initial progress bar
@@ -298,10 +374,10 @@ var
     bW1: Byte;
 begin
     // Show window
-    bW1 := WOpen(1, 6, 38, 15, WOFF);
+    bW1 := WOpen(1, 5, 38, 15, WOFF);
     WOrn(bW1, WPTOP, WPLFT, 'About');
-    WPrint(bW1, WPCNT,  1, WOFF, 'Menu Application');
-    WPrint(bW1, WPCNT,  2, WOFF, 'Version 1.00-PAS');
+    WPrint(bW1, WPCNT,  1, WOFF, 'Demo Application');
+    WPrint(bW1, WPCNT,  2, WOFF, 'Version 1.10-PAS');
     WPrint(bW1, WPCNT,  3, WOFF, '(C) 2022  Wade Ripkowski, amarok');
     WPrint(bW1, WPCNT,  5, WOFF, 'Application to demonstrate');
     WPrint(bW1, WPCNT,  6, WOFF, 'the MadPascal library.');
@@ -334,8 +410,7 @@ begin
     bD := false;
     bC := 1;
     // Open window
-    bW1 := WOpen(16, 10, 14, 5, WOFF);
-    WOrn(bW1, WPTOP, WPLFT, 'Sub-Menu');
+    bW1 := WOpen(8, 3, 14, 5, WOFF);
 
     // Loop until exit
     while not bD do
@@ -356,49 +431,78 @@ begin
     WClose(bW1);
 end;
 
-
-// Variables
+// ------------------------------------------------------------
+// Func...: MainMenu
+// Desc...: Main menu routine
+// ------------------------------------------------------------
+procedure MainMenu;
 var
-    bW1, bW2, bC: Byte;
+    bW1, bC: Byte;
     bD: Boolean;
 const
-    pcM: array[0..4] of string =
-      (' Input Form   ', ' Progress Bar ', ' Sub-Menu     ', ' About        ', ' Exit         ');
+    pcM: array[0..3] of string = (' File     ', ' Input    ', ' Progress ', ' Exit     ');
+
 begin
     bD := false;
     bC := 1;
+    // Open window
+    bW1 := WOpen(1, 3, 12, 6, WOFF);
 
+    // Loop until exit
+    while not bD do
+    begin
+        // Display menu and get choice
+        bC := MenuV(bW1, 1, 1, WON, bC, 4, pcM);
+
+        // Process choice
+        case bC of
+            1: FileInput;
+            2: FormInput;
+            3: ProgTest;
+            4:  begin
+                    bE := true;
+                    bD := true;
+                end;
+            XESC: bD := true;
+        end;
+    end;
+
+    // Close window
+    WClose(bW1);
+end;
+
+begin
+    bE := false;
+    bC := 1;
     // Setup screen
     WInit;
     WBack(14);
 
-    // Open header window
-    bW1 := WOpen(0, 0, 40, 3, WON);
-    WPrint(bW1, WPCNT, 1, WOFF, 'D E M O N S T R A T I O N');
-
     // Open menu window
-    bW2 := WOpen(12, 7, 16, 9, WOFF);
-    WOrn(bW2, WPTOP, WPCNT, 'Menu');
+    bW1 := WOpen(0, 0, 40, 3, WOFF);
+    
+
+    // Open header window
+    bW2 := WOpen(0, 21, 40, 3, WON);
+    WPrint(bW2, WPCNT, 1, WOFF, 'D E M O N S T R A T I O N');
 
     // Loop until done (Exit selected)
-    while not bD do
+    while not bE do
     begin
         // Call menu
-        bC := MenuV(bW2, 1, 2, WON, bC, 5, pcM);
+        bC := MenuH(bW1, 1, 1, WON, bC, 3, pcM);
 
         // Process choice
         case bC of
-            1: FormInput;
-            2: ProgTest;
-            3: SubMenu;
-            4: About;
-            5: bD := true;
+            1: MainMenu;
+            2: SubMenu;
+            3: About;
         end;
 
         // Exit on ESC as well
         if bC = XESC then
         begin
-            bD := true;
+            bE := true;
         end;
     end;
 

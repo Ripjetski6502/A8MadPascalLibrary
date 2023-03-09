@@ -1,11 +1,12 @@
 // Library: a8defines.pas
 // Desc...: Atari 8 Bit Library Definitions
-// Author.: Wade Ripkowski, amarok
-// Date...: 2022.09
+// Author.: Wade Ripkowski, amarok, MADRAFi
+// Date...: 2023.03
 // License: GNU General Public License v3.0
 // Note...: Requires: a8defwin.pas
 //          -Converted from C
 // Revised:
+// - Added CHDN_I definition
 
 unit a8defines;
 
