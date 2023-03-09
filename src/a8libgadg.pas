@@ -9,7 +9,7 @@
 // Require: a8libwin.pas
 //          a8libstr.pas
 //          a8libmisc.pas
-            a8libmenu.pas
+//          a8libmenu.pas
 // Revised:
 // - Added orientation parameter to function GButton 
 // - Added GCombo gadget
