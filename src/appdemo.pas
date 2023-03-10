@@ -300,7 +300,7 @@ begin
     // Show window
     bW1 := WOpen(1, 6, 38, 15, WOFF);
     WOrn(bW1, WPTOP, WPLFT, 'About');
-    WPrint(bW1, WPCNT,  1, WOFF, 'Menu Application');
+    WPrint(bW1, WPCNT,  1, WOFF, 'Demo Application');
     WPrint(bW1, WPCNT,  2, WOFF, 'Version 1.00-PAS');
     WPrint(bW1, WPCNT,  3, WOFF, '(C) 2022  Wade Ripkowski, amarok');
     WPrint(bW1, WPCNT,  5, WOFF, 'Application to demonstrate');
@@ -309,7 +309,7 @@ begin
     WPrint(bW1, 4,      9, WOFF, 'V1-2021-Atari8: Action!');
     WPrint(bW1, 2,     10, WOFF, 'V1-C-2022-Atari8: C (CC65)');
     WPrint(bW1, 2,     11, WOFF, 'V1-PAS-2022-Atari8: PAS (MadPascal)');
-    WPrint(bW1, WPCNT, 13, WON,  ' Ok ');
+    WPrint(bW1, WPCNT, 13, WON,  '[  Ok  ]');
 
     // Wait for key
     WaitKCX(WOFF);
