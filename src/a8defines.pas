@@ -48,6 +48,7 @@ const
     GALNUM = 1;
     GALPHA = 2;
     GNUMER = 3;
+    GFILE  = 4;
 
     // Menu Exits
     XESC  = 253;

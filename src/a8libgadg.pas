@@ -252,10 +252,10 @@ begin
                 Result := XESC;
                 bF := true;
             end
-            else if bK = KTAB then
+            else if (bK = KTAB) or (bK = KENTER) then
             begin
                 // Set tab exit and exit flag
-                Result := XTAB;
+                Result := bC;
                 bF := true;
             end
             else if (bK = KSPACE) or (bK = KX) or (bK = KX_S) then
@@ -269,16 +269,12 @@ begin
                     bC := GCON;
                 end;
                 Result := bC;
-                bF := true;
-            end;
+            end
         end;
     end;
 
-    // If current and return are same
-    if Result = bC then
-    begin
         // Show exit value
-        if Result = GCON then
+        if bC = GCON then
         begin
             tmpStr := 'X';
         end
@@ -286,18 +282,6 @@ begin
             tmpStr := ' ';
         end;
         WPrint(bN, x + 1, y, WOFF, tmpStr);
-    end
-    else begin
-        // Show default value (no change)
-        if bD = GCON then
-        begin
-            tmpStr := 'X';
-        end
-        else begin
-            tmpStr := ' ';
-        end;
-        WPrint(bN, x + 1, y, WOFF, tmpStr);
-    end;
 end;
 
 
@@ -406,19 +390,13 @@ begin
                 Result := XESC;
                 bF := true;
             end
-            // Tab
-            else if bK = KTAB then
-            begin
-                Result := XTAB;
-                bF := true;
-            end
             // Space
             else if bK = KSPACE then
             begin
                 Result := bC;
             end
-            // Enter
-            else if bK = KENTER then
+            // Tab or Enter
+            else if (bK = KTAB) or (bK = KENTER) then
             begin
                 Result := bC;
                 bF := true;
@@ -445,7 +423,7 @@ var
     bL, bK, bC, xp, yp: Byte;
 begin
     bF:= false;
-    bM:= false;
+    bM:= false; // flag to display options or aaccept value
 
     // Set default return and current button to default passed in
     Result := bI;
@@ -458,12 +436,12 @@ begin
         // xp := 0;
         // yp := 0;
 
-        WPrint(bN, x, y + yp, WON, pS[bI]);
+        WPrint(bN, x, y, WON, pS[bI]);
         WPos(bN, x + Length(pS[bI]), y);
         WPut(bN, CHDN_I);
         // Display options
-        if bM then
-        begin
+        // if bM then
+        // begin
             // for bL := 0 to bS - 1 do
             // begin
                 // If current item then add pointer, else space
@@ -485,9 +463,9 @@ begin
                 // else begin
                 //     // WPut(bN, CHO_L);
                 // end;
-                bC:=MenuV(bN, x, y + 1, WON, bC, bS, pS);
+                // bC:=MenuV(bN, x, y + 1, WON, bC, bS, pS);
             // end;
-        end;
+        // end;
         // If initial item is display only, set exit flag
         if bE = GDISP then
         begin
@@ -499,6 +477,7 @@ begin
             bK := WaitKCX(WOFF);
 
             // Process keystrokes
+
             // Up or left
             if (bK = KLEFT) or (bK = KPLUS) or (bK = KUP) or (bK = KMINUS) then
             begin
@@ -541,6 +520,7 @@ begin
             begin
                 if not bM then
                 begin
+                    bC:=MenuV(bN, x, y + 1, WON, bC, bS, pS);
                     bM:= true;
                 end
                 else begin
@@ -633,13 +613,7 @@ begin
                 bF := true;
                 cL := ByteToStr3(bI);
             end
-            else if bK = KTAB then
-            begin
-                Result := XTAB;
-                bF := true;
-                cL := ByteToStr3(bI);
-            end
-            else if bK = KENTER then
+            else if (bK = KTAB) or (bK = KENTER) then
             begin
                 Result := bD;
                 bF := true;
@@ -739,7 +713,11 @@ begin
             if bE > 0 then
             begin
                 Dec(bE);
-                cE[bE + 1] := CHSPACE;
+                // cE[bE + 1] := CHSPACE;
+                for bL := bE + 1 to bZ - 1 do
+                begin
+                    cE[bL] := cE[bL + 1];
+                end;
             end;
         end
         // Is internal code Shift_Del?  (clear line)
@@ -818,7 +796,7 @@ begin
             begin
                 bP := true;
             end
-            // For ALNUM, allow _ 0-9 A-Z a-z
+            // For ALNUM, allow ' ' 0-9 A-Z a-z
             else if bT = GALNUM then
             begin
                 if (bC = 32) or ((bC >= 48) and (bC <= 57)) or
@@ -828,7 +806,7 @@ begin
                     bP := true;
                 end;
             end
-            // For ALPHA, allow _ A-Z a-z
+            // For ALPHA, allow ' ' A-Z a-z
             else if bT = GALPHA then
             begin
                 if (bC = 32) or ((bC >= 65) and (bC <= 90)) or
@@ -842,6 +820,17 @@ begin
             begin
                 if (bC = 45) or (bC = 46) or
                    ((bC >= 48) and (bC <= 57)) then
+                begin
+                    bP := true;
+                end;
+            end
+            // For FILE, allow . _ - 0-9 A-Z a-z
+            else if bT = GFILE then
+            begin
+                if (bC = 45) or (bC = 46) or
+                   ((bC >= 48) and (bC <= 57)) or
+                   ((bC >= 65) and (bC <= 90)) or
+                   ((bC >= 97) and (bC <= 122)) then
                 begin
                     bP := true;
                 end;
