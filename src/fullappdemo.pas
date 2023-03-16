@@ -39,7 +39,7 @@ const
 
 begin
     Result:= false;
-    selected_drive:=1;
+    selected_drive:=0;
     selected_file:='            ';
     win_file:=WOpen(5, 4, 30, 16, WOFF);
     WOrn(win_file, WPTOP, WPLFT, 'Choose file');
@@ -49,20 +49,19 @@ begin
 
 
     WPrint(win_file, 2, 4, WOFF, 'Drive:');
-    GCombo(win_file, 2, 5, GDISP, 0, 4, menu_drives);
+    GCombo(win_file, 2, 5, GDISP, selected_drive, 8, menu_drives);
     
 
 
     // selected:=MenuV(win_drive, 1, 1, WOFF, 1, 1, menu_drives);
     // win_list:=WOpen(7, 5, 14, 10, WOFF);
-    WOrn(win_list, WPTOP, WPLFT, 'List');
+    // WOrn(win_list, WPTOP, WPLFT, 'List');
 
     // WPrint(win_list, 1, 1, WOFF, 'FILE.XEX');
     // WPrint(win_list, 1, 2, WOFF, 'FILE2.TXT');
     // WPrint(win_list, 1, 3, WOFF, 'FILE3.DAT');
 
     GButton(win_file, 19, 11, GVERT, GDISP, 2, buttons);
-    // WaitKCX(WOFF);
     repeat
 
         // file
@@ -76,7 +75,7 @@ begin
             selected_drive := read_drive;
         end;
         // WOrn(win_file, WPBOT, WPRGT, selected_drive);
-        // GCombo(win_file, 2, 5, GDISP, selected_drive, 8, menu_drives);
+        GCombo(win_file, 2, 5, GDISP, selected_drive, 8, menu_drives);
 
 
         // Buttons to confirm
@@ -463,7 +462,7 @@ begin
         case bC of
             1: FileInput;
             2: FormInput;
-            3: ProgTest;
+            3: if GConfirm('Are you sure?') then ProgTest;
             4:  begin
                     bE := true;
                     bD := true;

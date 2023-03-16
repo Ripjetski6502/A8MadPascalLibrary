@@ -31,6 +31,7 @@ uses
 // --------------------------------------------------
 procedure GAlert(pS: string);
 procedure GProg(bN, x, y, bS: Byte);
+function GConfirm(pS: string) : Boolean;
 function GButton(bN, x, y, bO, bD, bS: Byte; pA: TStringArray): Byte;
 function GCheck(bN, x, y, bI, bD: Byte): Byte;
 function GRadio(bN, x, y, bD, bE, bI, bS: Byte; pS: TStringArray): Byte;
@@ -59,10 +60,10 @@ begin
     x := (38 - bL) div 2;
 
     // Show window
-    bW := WOpen(x, 10, bL + 2, 5, WOFF);
+    bW := WOpen(x, 10, bL + 2, 6, WOFF);
     WOrn(bW, WPTOP, WPCNT, 'Alert!');
-    WPrint(bW, WPCNT, 1, WOFF, pS);
-    WPrint(bW, WPCNT, 3, WON, ' OK ');
+    WPrint(bW, WPCNT, 2, WOFF, pS);
+    WPrint(bW, WPCNT, 4, WON, '[  OK  ]');
 
     // Wait for key
     x := WaitKCX(WOFF);
@@ -71,6 +72,45 @@ begin
     WClose(bW);
 end;
 
+// ------------------------------------------------------------
+// Func...: GConfirm(pS: string)
+// Desc...: Displays centered alert on screen and awaits confirmation
+// Param..: pS = Message string
+// Notes..: 38 characters max
+// ------------------------------------------------------------
+function GConfirm(pS: string) : Boolean;
+var
+    bW, bL, bM, x1, x2: Byte;
+const
+    buttons : array[0..1] of string = ('[  OK  ]', '[Cancel]');
+
+begin
+    // Find left window position
+    bL := Length(pS);
+    if bL < 18 then bL:=18;
+    x1 := (38 - bL) div 2;
+    x2 := (bL + 2 - 18) div 2 + 1;
+
+    // Show window
+    bW := WOpen(x1, 10, bL + 2, 6, WOFF);
+    WOrn(bW, WPTOP, WPCNT, 'Confirm');
+    WPrint(bW, WPCNT, 2, WOFF, pS);
+    GButton(bW, x2, 4, GHORZ, GDISP, 2, buttons);
+
+    
+    repeat
+        // Buttons to confirm
+        bM := GButton(bW, x2, 4, GHORZ, GEDIT, 2, buttons);
+        GButton(bW, x2, 4, GHORZ, GDISP, 2, buttons);
+    until bM <> XTAB;
+    
+    // Check for acceptance (OK button), and set exit flag
+    if bM = 1 then Result := true
+    else Result := false;
+
+    // Close window
+    WClose(bW);
+end;
 
 // ------------------------------------------------------------
 // Func...: GProg(bN, x, y, bS: Byte)
@@ -421,6 +461,8 @@ function GCombo(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
 var
     bF, bM: Boolean;
     bL, bK, bC, xp, yp: Byte;
+    combo_menu: Byte;
+
 begin
     bF:= false;
     bM:= false; // flag to display options or aaccept value
@@ -432,40 +474,10 @@ begin
     // Loop until exit
     while not bF do
     begin
-        // Set drawing position
-        // xp := 0;
-        // yp := 0;
-
-        WPrint(bN, x, y, WON, pS[bI]);
+        WPrint(bN, x, y, WOFF, pS[bI]);
         WPos(bN, x + Length(pS[bI]), y);
-        WPut(bN, CHDN_I);
+        WPut(bN, CHDN);
         // Display options
-        // if bM then
-        // begin
-            // for bL := 0 to bS - 1 do
-            // begin
-                // If current item then add pointer, else space
-                // WPos(bN, x + xp, y + yp);
-                // if ((bL + 1) = bC) and (bE <> GDISP) then
-                // begin
-                //     // WPut(bN, CHRGT_I);
-                // end
-                // else begin
-                //     // WPut(bN, CHSPACE);
-                // end;
-
-                // // If selected then add filled circle, else unfilled
-                // WPos(bN, x + xp + 1, y + yp);
-                // if bL + 1 = Result then
-                // begin
-                //     // WPut(bN, CHBALL);
-                // end
-                // else begin
-                //     // WPut(bN, CHO_L);
-                // end;
-                // bC:=MenuV(bN, x, y + 1, WON, bC, bS, pS);
-            // end;
-        // end;
         // If initial item is display only, set exit flag
         if bE = GDISP then
         begin
@@ -473,11 +485,13 @@ begin
         end
         // Not display, edit, do it.
         else begin
+            WPrint(bN, x, y, WON, pS[bI]);
+            WPos(bN, x + Length(pS[bI]), y);
+            WPut(bN, CHDN_I);
             // Get keystroke
             bK := WaitKCX(WOFF);
 
             // Process keystrokes
-
             // Up or left
             if (bK = KLEFT) or (bK = KPLUS) or (bK = KUP) or (bK = KMINUS) then
             begin
@@ -507,32 +521,34 @@ begin
             // Tab
             else if bK = KTAB then
             begin
-                Result := XTAB;
+                // Result := XTAB;
+                Result := bC;
                 bF := true;
             end
-            // Space
-            // else if bK = KSPACE then
-            // begin
-            //     Result := bC;
-            // end
-            // Enter
             else if bK = KENTER then
             begin
                 if not bM then
                 begin
-                    bC:=MenuV(bN, x, y + 1, WON, bC, bS, pS);
-                    bM:= true;
+                    combo_menu:=WOpen(x, y + 1, 5, 10, WOFF);
+                    // bC:=MenuV(bN, x, y + 1, WON, bC, bS, pS);
+                    bC:=MenuV(combo_menu, 1, 1, WON, bC, bS, pS);
+                    // WPrint(bN, x, y + 1, WOFF, '12345');
+                    bK := WaitKCX(WOFF);
+                    WClose(combo_menu);
+                    
+                    if (bC = XTAB) or (bC = XTAB) then bC := bI;
+                    // WOrn(bN, WPTOP, WPRGT, ByteToStr3(bC) );
+                    bM := true;
+                    // bF := false;
                 end
                 else begin
                     Result := bC;
+                    // bM := false;
                     bF := true;
                 end;
             end;
         end;
     end;
-    WPrint(bN, x, y, WOFF, pS[bI]);
-    WPos(bN, x + Length(pS[bI]), y);
-    WPut(bN, CHDN);
 end;
 
 
