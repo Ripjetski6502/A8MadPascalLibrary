@@ -39,7 +39,7 @@ const
 
 begin
     Result:= false;
-    selected_drive:=0;
+    selected_drive:=1;
     selected_file:='            ';
     win_file:=WOpen(5, 4, 30, 16, WOFF);
     WOrn(win_file, WPTOP, WPLFT, 'Choose file');
@@ -69,14 +69,12 @@ begin
 
         // Drives combo
         read_drive:= GCombo(win_file, 2, 5, GEDIT, selected_drive, 8, menu_drives);
-        // WOrn(win_file, WPTOP, WPRGT, read_drive);
         if (read_drive <> XESC) then
         begin
             selected_drive := read_drive;
         end;
-        // WOrn(win_file, WPBOT, WPRGT, selected_drive);
+        WOrn(win_file, WPTOP, WPRGT, '---');
         GCombo(win_file, 2, 5, GDISP, selected_drive, 8, menu_drives);
-
 
         // Buttons to confirm
         bM := GButton(win_file, 19, 11, GVERT, GEDIT, 2, buttons);    

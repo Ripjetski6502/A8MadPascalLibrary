@@ -252,7 +252,7 @@ function GCheck(bN, x, y, bI, bD: Byte): Byte;
 var
     bF: Boolean;
     bK, bC: Byte;
-    tmpStr: string;
+    tmpStr: string[1];
 begin
     bF := false;
 
@@ -460,8 +460,9 @@ end;
 function GCombo(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
 var
     bF, bM: Boolean;
-    bL, bK, bC, xp, yp: Byte;
+    bL, bK, bC: Byte;
     combo_menu: Byte;
+    bA, i: Byte;
 
 begin
     bF:= false;
@@ -471,11 +472,18 @@ begin
     Result := bI;
     bC := bI;
 
+    // calculate lenght of longeest string in pS
+    for i := 0 to Length(pS) - 1 do
+    begin
+        bA:= Length(pS[i]);
+        if bA > bL then bL:= bA;
+    end;
+    
     // Loop until exit
     while not bF do
     begin
-        WPrint(bN, x, y, WOFF, pS[bI]);
-        WPos(bN, x + Length(pS[bI]), y);
+        WPrint(bN, x, y, WOFF, pS[bC - 1]);
+        WPos(bN, x + bL, y);
         WPut(bN, CHDN);
         // Display options
         // If initial item is display only, set exit flag
@@ -485,8 +493,8 @@ begin
         end
         // Not display, edit, do it.
         else begin
-            WPrint(bN, x, y, WON, pS[bI]);
-            WPos(bN, x + Length(pS[bI]), y);
+            WPrint(bN, x, y, WON, pS[bC - 1]);
+            WPos(bN, x + bL, y);
             WPut(bN, CHDN_I);
             // Get keystroke
             bK := WaitKCX(WOFF);
@@ -529,21 +537,16 @@ begin
             begin
                 if not bM then
                 begin
-                    combo_menu:=WOpen(baW.bX[bN] + x, baW.bY[bN] + y + 1, 5, 10, WOFF);
-                    // bC:=MenuV(bN, x, y + 1, WON, bC, bS, pS);
+                    // calculating position based on parent window
+                    combo_menu:=WOpen(baW.bX[bN] + x - 1, baW.bY[bN] + y + 1, 5, 10, WOFF);
+
                     bC:=MenuV(combo_menu, 1, 1, WON, bC, bS, pS);
-                    // WPrint(bN, x, y + 1, WOFF, '12345');
-                    // bK := WaitKCX(WOFF);
                     WClose(combo_menu);
-                    
-                    if (bC = XTAB) or (bC = XTAB) then bC := bI;
-                    // WOrn(bN, WPTOP, WPRGT, ByteToStr3(bC) );
                     bM := true;
-                    // bF := false;
+
                 end
                 else begin
                     Result := bC;
-                    // bM := false;
                     bF := true;
                 end;
             end;
