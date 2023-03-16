@@ -47,7 +47,7 @@ begin
 
     WPrint(win_file, 2, 2, WOFF, 'File:');
 
-
+    WDiv(win_file, 3, WON);
     WPrint(win_file, 2, 4, WOFF, 'Drive:');
     GCombo(win_file, 2, 5, GDISP, selected_drive, 8, menu_drives);
     

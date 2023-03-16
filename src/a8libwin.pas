@@ -32,6 +32,7 @@ function WPos(bN, x, y: Byte): Byte;
 function WPut(bN: Byte; x: Char): Byte;
 function WPrint(bN, x, y, bI: Byte; pS: string): Byte;
 function WOrn(bN, bT, bL: Byte; pS: string): Byte;
+function WDiv(bN, y, bD: Byte): Byte;
 
 
 implementation
@@ -495,5 +496,67 @@ begin
     end;
 end;
 
+// --------------------------------------------------
+// Function: WDiv(bN: Byte, y: Byte, bD: Byte): Byte
+// Desc....: Add or remove divider
+// Param...: bN = window handle number
+//            y = Which row for divider
+//           bD = Display On/Off flag
+// Returns.: 0 if success
+//           >100 on error
+// --------------------------------------------------
+function WDiv(bN, y, bD: Byte): Byte;
+var 
+    bR : Byte = WENOPN;
+    bS, bL : Byte;
+    cS: Word;
+    cL: String[41];
+
+begin
+    // Only if window open
+    if (baW.bU[bN] = WON) then
+    begin
+        // Get window width
+        bS := baW.bW[bN];
+
+        // Create divider string
+
+        // If turning on, set ornaments
+        if (bD = WON) then
+        begin
+            // Set solid line
+            FillChar(cL, bS, 82);
+            cL[1] := char(65);
+            cL[bS] := char(68);
+        end
+        else begin
+            // Set blank line
+            FillChar(cL, bS, 0);
+            cL[1] := char(124);
+            cL[bS] := char(124);
+        end;
+
+        // If inverse flag, flip line
+        if (baW.bI[bN] = WON) then
+        begin
+            for bL := 1 to bS do
+            begin
+                cL[bL] := Char(Byte(cL[bL]) xor 128);    
+            end;
+        end;
+
+        // Find location on screen
+        cS := DPeek(RSCRN) + ((baW.bY[bN] + y) * 40) + baW.bX[bN];
+
+        // Move to screen
+        Move(@cL[1], Pointer(cS), bS);
+
+
+        // Set valid return
+        bR := 0;
+    end;
+
+    Result := bR;
+end;
 
 end.
