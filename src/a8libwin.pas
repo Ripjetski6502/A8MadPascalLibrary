@@ -18,8 +18,11 @@ interface
 // Includes
 // --------------------------------------------------
 uses
-    Crt, SysUtils, a8defines, a8defwin, a8libstr;
+    a8defines, a8defwin;
 
+var
+    baW: td_wnrec;
+    
 // --------------------------------------------------
 // Function Prototypes
 // --------------------------------------------------
@@ -37,8 +40,10 @@ function WDiv(bN, y, bD: Byte): Byte;
 
 implementation
 
+uses
+    Crt, SysUtils, a8libstr;
+ 
 var
-    baW: td_wnrec;
     vCur: td_wnpos;
 
     // Window handle and memory storage

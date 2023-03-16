@@ -529,11 +529,11 @@ begin
             begin
                 if not bM then
                 begin
-                    combo_menu:=WOpen(x, y + 1, 5, 10, WOFF);
+                    combo_menu:=WOpen(baW.bX[bN] + x, baW.bY[bN] + y + 1, 5, 10, WOFF);
                     // bC:=MenuV(bN, x, y + 1, WON, bC, bS, pS);
                     bC:=MenuV(combo_menu, 1, 1, WON, bC, bS, pS);
                     // WPrint(bN, x, y + 1, WOFF, '12345');
-                    bK := WaitKCX(WOFF);
+                    // bK := WaitKCX(WOFF);
                     WClose(combo_menu);
                     
                     if (bC = XTAB) or (bC = XTAB) then bC := bI;
