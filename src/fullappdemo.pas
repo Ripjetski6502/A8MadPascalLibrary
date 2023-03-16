@@ -361,7 +361,7 @@ begin
         // Wait 1 second
         Delay(1000);
     end;
-
+    WClr(bW1);
     GAlert(' Press a key to continue. ');
 
     // Close windows

@@ -57,7 +57,7 @@ var
 begin
     // Find left window position
     bL := Length(pS);
-    x := (38 - bL) div 2;
+    x := (40 - 2 - bL) div 2;
 
     // Show window
     bW := WOpen(x, 10, bL + 2, 6, WOFF);
@@ -88,7 +88,7 @@ begin
     // Find left window position
     bL := Length(pS);
     if bL < 18 then bL:=18;
-    x1 := (38 - bL) div 2;
+    x1 := (40 - 2 - bL) div 2;
     x2 := (bL + 2 - 18) div 2 + 1;
 
     // Show window
