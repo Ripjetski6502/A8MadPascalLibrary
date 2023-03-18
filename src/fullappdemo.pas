@@ -28,38 +28,39 @@ const
 // ------------------------------------------------------------
 function FileInput: Boolean;
 var
-    win_file, win_list, win_drive: Byte;
+    win_file: Byte;
     read_drive, selected_drive: Byte;
     read_file: Byte;
     selected_file: String[12];
+    selected_list: Byte;
+    read_list: Byte;
     bM: Byte;
+    // list_files: array[0..9] of string = ('..', 'FILE.XEX', 'FILE2.TXT', 'FILE3.DAT', 'CORE.BIN', 'FILE5.BIN', 'FILE6.BIN', 'FILE7.BIN', 'FILE8.BIN', 'FILE9.BIN');
+    list_files: array[0..8] of string = ('..', 'FILE.XEX', 'FILE2.TXT', 'FILE3.DAT', 'CORE.BIN', 'FILE55555.BIN', 'FILE6666.BIN', 'FILE7777.BIN', 'FILE8.BIN');
+
 const
-    menu_drives: array[0..7] of string = ('D1:', 'D2:', 'D3:', 'D4:', 'D5:', 'D6:', 'D7:', 'D8:');
+    list_drives: array[0..7] of string = ('D1:', 'D2:', 'D3:', 'D4:', 'D5:', 'D6:', 'D7:', 'D8:');
     buttons : array[0..1] of string = ('[  OK  ]', '[Cancel]');
 
 begin
     Result:= false;
     selected_drive:=1;
     selected_file:='            ';
+    selected_list:=1;
+
     win_file:=WOpen(5, 4, 30, 16, WOFF);
     WOrn(win_file, WPTOP, WPLFT, 'Choose file');
 
 
     WPrint(win_file, 2, 2, WOFF, 'File:');
-
     WDiv(win_file, 3, WON);
-    WPrint(win_file, 2, 4, WOFF, 'Drive:');
-    GCombo(win_file, 2, 5, GDISP, selected_drive, 8, menu_drives);
+
+    WPrint(win_file, 21, 4, WOFF, 'Drive:');
+    GCombo(win_file, 21, 5, GDISP, selected_drive, 8, list_drives);
     
-
-
-    // selected:=MenuV(win_drive, 1, 1, WOFF, 1, 1, menu_drives);
-    // win_list:=WOpen(7, 5, 14, 10, WOFF);
-    // WOrn(win_list, WPTOP, WPLFT, 'List');
-
-    // WPrint(win_list, 1, 1, WOFF, 'FILE.XEX');
-    // WPrint(win_list, 1, 2, WOFF, 'FILE2.TXT');
-    // WPrint(win_list, 1, 3, WOFF, 'FILE3.DAT');
+    // WPrint(win_file, 2, 4, WOFF, 'List:');
+    GList(win_file, 2, 5, GDISP, selected_list, 6, '', list_files);
+    
 
     GButton(win_file, 19, 11, GVERT, GDISP, 2, buttons);
     repeat
@@ -68,13 +69,20 @@ begin
         read_file:= GInput(win_file, 8, 2, GFILE, 12, selected_file);
 
         // Drives combo
-        read_drive:= GCombo(win_file, 2, 5, GEDIT, selected_drive, 8, menu_drives);
+        read_drive:= GCombo(win_file, 21, 5, GEDIT, selected_drive, 8, list_drives);
         if (read_drive <> XESC) then
         begin
             selected_drive := read_drive;
         end;
-        WOrn(win_file, WPTOP, WPRGT, '---');
-        GCombo(win_file, 2, 5, GDISP, selected_drive, 8, menu_drives);
+        GCombo(win_file, 21, 5, GDISP, selected_drive, 8, list_drives);
+
+        // Files List
+        read_list:= GList(win_file, 2, 5, GEDIT, selected_list, 6, '', list_files);
+        if (read_list <> XESC) then
+        begin
+            selected_list := read_list;
+        end;
+        GList(win_file, 2, 5, GDISP, selected_list, 6, '', list_files);
 
         // Buttons to confirm
         bM := GButton(win_file, 19, 11, GVERT, GEDIT, 2, buttons);    

@@ -29,12 +29,13 @@ uses
 // --------------------------------------------------
 // Function Prototypes
 // --------------------------------------------------
-procedure GAlert(pS: string);
+procedure GAlert(pS: string[40-2]);
 procedure GProg(bN, x, y, bS: Byte);
-function GConfirm(pS: string) : Boolean;
+function GConfirm(pS: string[40-2]) : Boolean;
 function GButton(bN, x, y, bO, bD, bS: Byte; pA: TStringArray): Byte;
 function GCheck(bN, x, y, bI, bD: Byte): Byte;
 function GRadio(bN, x, y, bD, bE, bI, bS: Byte; pS: TStringArray): Byte;
+function GList(bN, x, y, bE, bI, bS: Byte; l: String[40-2]; pS: TStringArray): Byte;
 function GCombo(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
 function GSpin(bN, x, y, bL, bM, bI, bE: Byte): Byte;
 function GInput(bN, x, y, bT, bS: Byte; var pS: string): Byte;
@@ -51,7 +52,7 @@ uses
 // Param..: pS = Message string
 // Notes..: 38 characters max
 // ------------------------------------------------------------
-procedure GAlert(pS: string);
+procedure GAlert(pS: string[40-2]);
 var
     bW, bL, x: Byte;
 begin
@@ -78,7 +79,7 @@ end;
 // Param..: pS = Message string
 // Notes..: 38 characters max
 // ------------------------------------------------------------
-function GConfirm(pS: string) : Boolean;
+function GConfirm(pS: String[40-2]) : Boolean;
 var
     bW, bL, bM, x1, x2: Byte;
 const
@@ -446,27 +447,138 @@ begin
 end;
 
 // ------------------------------------------------------------
-// Func...: GCombo(bN, x, y, bD, bE, bI, bS: Byte; pS: TStringArray): Byte;
-// Desc...: Display combo and get choice
+// Func...: GList(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
+// Desc...: Display list and get choice
 // Param..: bN = Window handle number
-//           x = Column of window to place combo
-//           y = Row of window to place combo
+//           x = Column of window to place list
+//           y = Row of window to place list
+//          bE = Edit or display indicator (0 to display and exit)
+//          bI = Initial selected option
+//          bS = Size of the List to display
+//           l = Label showed for the list
+//          pS = Pointer to array of list option strings
+// ------------------------------------------------------------
+function GList(bN, x, y, bE, bI, bS: Byte; l: String[40-2]; pS: TStringArray): Byte;
+var
+    bF: Boolean;
+    bL, bK, bC, xp, yp: Byte;
+    tmp, s: Byte;
+
+begin
+    bF := false;
+    if Length(l) = 0 then l:= 'List:';
+
+    // Set default return and current button tod default passed in
+    Result := bI;
+    bC := bI;
+
+    // Loop until exit
+    while not bF do
+    begin
+        // Set drawing position
+        xp := 0;
+        yp := 1;
+
+        // Display buttons
+        for bL := 0 to bS - 1 do
+        begin
+            // If current item then add pointer, else space
+            if ((bL + 1) = bC) and (bE <> GDISP) then
+            begin
+                tmp:=WON;
+            end
+            else begin
+                tmp:=WOFF
+            end;
+            WPrint(bN, x + xp, y + yp, tmp, pS[bL]);
+            Inc(yp);
+        end;
+        
+
+        // If initial item is display only, set exit flag
+        if bE = GDISP then
+        begin
+            // show selection
+            if bC = Result then
+            begin
+                WPrint(bN, x, y + bC, WON, pS[bC-1]);
+            end
+            else begin
+                WPrint(bN, x, y + bC, WON, pS[bC]);
+            end;
+            WPrint(bN, x, y, WOFF, l);
+            bF := true;
+        end
+        // Not display, edit, do it.
+        else begin
+            WPrint(bN, x, y, WON, l);
+            // Get keystroke
+            bK := WaitKCX(WOFF);
+
+            // Process keystrokes
+            // Up or left
+            if (bK = KLEFT) or (bK = KPLUS) or (bK = KUP) or (bK = KMINUS) then
+            begin
+                // Decrement and check for underrun
+                Dec(bC);
+                if bC < 1 then
+                begin
+                    bC := 1;
+                end;
+            end
+            // Down or right
+            else if (bK = KRIGHT) or (bK = KASTER) or (bK = KDOWN) or (bK = KEQUAL) then
+            begin
+                // Increment and check for overrun
+                Inc(bC);
+                if bC > bS then
+                begin
+                    bC := bS;
+                end;
+            end
+            // ESC
+            else if bK = KESC then
+            begin
+                Result := XESC;
+                bF := true;
+            end
+            // Space
+            else if bK = KSPACE then
+            begin
+                Result := bC;
+            end
+            // Tab or Enter
+            else if (bK = KTAB) or (bK = KENTER) then
+            begin
+                Result := bC;
+                bF := true;
+            end;
+        end;
+    end;
+end;
+
+// ------------------------------------------------------------
+// Func...: GCombo(bN, x, y, bD, bE, bI, bS: Byte; pS: TStringArray): Byte;
+// Desc...: Display list and get choice
+// Param..: bN = Window handle number
+//           x = Column of window to place list
+//           y = Row of window to place list
 
 //          bE = Edit or display indicator (0 to display and exit)
 //          bI = Initial selected option
 //          bS = Number of options
-//          pS = Pointer to array of combo option strings
+//          pS = Pointer to array of list option strings
 // ------------------------------------------------------------
 function GCombo(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
 var
     bF, bM: Boolean;
     bL, bK, bC: Byte;
-    combo_menu: Byte;
+    bZ: Byte;
     bA, i: Byte;
 
 begin
     bF:= false;
-    bM:= false; // flag to display options or aaccept value
+    bM:= false; // flag to display options or accept value
 
     // Set default return and current button to default passed in
     Result := bI;
@@ -538,10 +650,10 @@ begin
                 if not bM then
                 begin
                     // calculating position based on parent window
-                    combo_menu:=WOpen(baW.bX[bN] + x - 1, baW.bY[bN] + y + 1, 5, 10, WOFF);
+                    bZ:=WOpen(baW.bX[bN] + x - 1, baW.bY[bN] + y + 1, 5, 10, WOFF);
 
-                    bC:=MenuV(combo_menu, 1, 1, WON, bC, bS, pS);
-                    WClose(combo_menu);
+                    bC:=MenuV(bZ, 1, 1, WON, bC, bS, pS);
+                    WClose(bZ);
                     bM := true;
 
                 end
