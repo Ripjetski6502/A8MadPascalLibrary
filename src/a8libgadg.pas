@@ -462,9 +462,10 @@ end;
 function GList(bN, x, y, bE, bI, bV, bS: Byte; pS: TStringArray): Byte;
 var
     bF: Boolean;
-    bStart, bEnd, bK, bL, bC, yp: Byte;
+    bStart, bEnd, bK, bL, bM, bC, xp, yp: Byte;
     tmp, size: Byte;
     line: String[40];
+
 
 begin
     bF := false;
@@ -473,15 +474,23 @@ begin
     Result := bI;
     bC := bI - 1; // calculate array index
     bStart := 0;
-    size:=1;
+    size:=0;
 
     // Loop until exit
     while not bF do
     begin
         // Set drawing position
-        // xp := 0;
+        xp := 0;
         yp := 0;
         bEnd := Min(bStart + bV - 1, bS - 1);
+        
+        for bL := 0 to bS - 1 do
+        begin
+            tmp:= Length(pS[bL]);
+            if size < tmp then size:= tmp;
+        end;
+        SetLength(line, size);
+        
         // Display buttons
         for bL := bStart to bEnd do
         begin
@@ -490,29 +499,20 @@ begin
                 tmp:=WON
             else
                 tmp:=WOFF;
-            SetLength(line, size);
-            FillChar(@line[1], size, CHSPACE);
-            // clean line with spaces
-            WPrint(bN, x, y + yp, WOFF, line);
-            WPrint(bN, x, y + yp, tmp, pS[bL]);
+
+            line:= pS[bL];
+            xp:= Length(line);
+            SetLength(line,size);
+            FillChar(@line[xp + 1], size - xp, CHSPACE);
+            WPrint(bN, x, y + yp, tmp, line);
             Inc(yp);
-            tmp:= Length(pS[bL]);
-            if size < tmp then size:= tmp;
-            
         end;
+        
+
 
         // If initial item is display only, set exit flag
         if bE = GDISP then
         begin
-            // show selection
-            // if bC = Result then
-            // begin
-            //     WPrint(bN, x, y + bC, WON, pS[bC-1]);
-            // end
-            // else begin
-            //     WPrint(bN, x, y + bC, WON, pS[bC]);
-            // end;
-            // WPrint(bN, x, y, WOFF, l);
             bF := true;
         end
         // Not display, edit, do it.
