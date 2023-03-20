@@ -16,6 +16,7 @@ uses
 var
     bW1, bW2, bC: Byte;
     bE: Boolean;
+
 const
     pcM: array[0..2] of string =
       (' Main ', ' Sub-Menu ', ' About ');
@@ -27,27 +28,33 @@ const
 // Returns: TRUE if accepted, else FALSE
 // ------------------------------------------------------------
 function FileInput: Boolean;
-var
-    win_file: Byte;
-    read_drive, selected_drive: Byte;
-    read_file: Byte;
-    selected_file: String[12];
-    selected_list: Byte;
-    read_list: Byte;
-    bM: Byte;
-    // list_files: array[0..9] of string = ('..', 'FILE.XEX', 'FILE2.TXT', 'FILE3.DAT', 'CORE.BIN', 'FILE5.BIN', 'FILE6.BIN', 'FILE7.BIN', 'FILE8.BIN', 'FILE9.BIN');
-    list_files: array[0..8] of string = ('..', 'FILE.XEX', 'FILE2.TXT', 'FILE3.DAT', 'CORE.BIN', 'FILE5555.BIN', 'FILE6666.BIN', 'FILE7777.BIN', 'FILE8.BIN');
 
 const
     list_drives: array[0..7] of string = ('D1:', 'D2:', 'D3:', 'D4:', 'D5:', 'D6:', 'D7:', 'D8:');
     buttons : array[0..1] of string = ('[  OK  ]', '[Cancel]');
+    list_files: array[0..9] of string = ('FILE.XEX', 'FILE2.TXT', 'FILE3.DAT', 'CORE.BIN', 'FILE555.BIN', 'FILE6.BIN', 'FILE77.BIN', 'FILE8.BIN', 'FILE999.BIN', 'FILE101010.BIN');
+    FILE_SIZE = 12;
+
+var
+    win_file: Byte;
+    read_drive, selected_drive: Byte;
+    read_file: Byte;
+    selected_file: String[FILE_SIZE];
+    selected_list: Byte;
+    read_list: Byte;
+    bM: Byte;
+    tmp: Byte;    
 
 begin
     Result:= false;
     selected_drive:=1;
-    selected_file:='            ';
     selected_list:=1;
-
+    // selected_file:='            ';
+    selected_file:= list_files[selected_list - 1];
+    tmp:= Length(selected_file);
+    SetLength(selected_file, FILE_SIZE);
+    FillChar(@selected_file[tmp + 1], FILE_SIZE - tmp, CHSPACE );
+    
     win_file:=WOpen(5, 4, 30, 16, WOFF);
     WOrn(win_file, WPTOP, WPLFT, 'Choose file');
 
@@ -58,8 +65,8 @@ begin
     WPrint(win_file, 21, 4, WOFF, 'Drive:');
     GCombo(win_file, 21, 5, GDISP, selected_drive, 8, list_drives);
     
-    // WPrint(win_file, 2, 4, WOFF, 'List:');
-    GList(win_file, 2, 5, GDISP, selected_list, 6, Length(list_files), list_files);
+    WPrint(win_file, 2, 4, WOFF, 'List:');
+    GList(win_file, 2, 5, GDISP, selected_list, 8, Length(list_files), list_files);
 
     GButton(win_file, 19, 11, GVERT, GDISP, 2, buttons);
     repeat
@@ -76,12 +83,17 @@ begin
         GCombo(win_file, 21, 5, GDISP, selected_drive, 8, list_drives);
 
         // Files List
-        read_list:= GList(win_file, 2, 5, GEDIT, selected_list, 6, Length(list_files), list_files);
+        read_list:= GList(win_file, 2, 5, GEDIT, selected_list, 8, Length(list_files), list_files);
         if (read_list <> XESC) then
         begin
             selected_list := read_list;
+            selected_file:= list_files[selected_list - 1];
+            tmp:= Length(selected_file);
+            SetLength(selected_file, FILE_SIZE);
+            FillChar(@selected_file[tmp + 1], FILE_SIZE - tmp, CHSPACE );
+            WPrint(win_file, 8, 2, WOFF, selected_file);
         end;
-        GList(win_file, 2, 5, GDISP, selected_list, 6, Length(list_files), list_files);
+        GList(win_file, 2, 5, GDISP, selected_list, 8, Length(list_files), list_files);
 
         // Buttons to confirm
         bM := GButton(win_file, 19, 11, GVERT, GEDIT, 2, buttons);    
@@ -92,7 +104,7 @@ begin
     if bM = 1 then
     begin
         Result:=true;
-        GAlert('Processing...');
+        GAlert(Concat(Concat('Processing...', list_drives[selected_drive - 1]), selected_file));
     end;
 
       WClose(win_file);
