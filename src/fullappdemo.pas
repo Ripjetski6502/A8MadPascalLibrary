@@ -36,7 +36,7 @@ var
     read_list: Byte;
     bM: Byte;
     // list_files: array[0..9] of string = ('..', 'FILE.XEX', 'FILE2.TXT', 'FILE3.DAT', 'CORE.BIN', 'FILE5.BIN', 'FILE6.BIN', 'FILE7.BIN', 'FILE8.BIN', 'FILE9.BIN');
-    list_files: array[0..8] of string = ('..', 'FILE.XEX', 'FILE2.TXT', 'FILE3.DAT', 'CORE.BIN', 'FILE55555.BIN', 'FILE6666.BIN', 'FILE7777.BIN', 'FILE8.BIN');
+    list_files: array[0..8] of string = ('..', 'FILE.XEX', 'FILE2.TXT', 'FILE3.DAT', 'CORE.BIN', 'FILE5555.BIN', 'FILE6666.BIN', 'FILE7777.BIN', 'FILE8.BIN');
 
 const
     list_drives: array[0..7] of string = ('D1:', 'D2:', 'D3:', 'D4:', 'D5:', 'D6:', 'D7:', 'D8:');
@@ -59,8 +59,7 @@ begin
     GCombo(win_file, 21, 5, GDISP, selected_drive, 8, list_drives);
     
     // WPrint(win_file, 2, 4, WOFF, 'List:');
-    GList(win_file, 2, 5, GDISP, selected_list, 6, '', list_files);
-    
+    GList(win_file, 2, 5, GDISP, selected_list, 6, Length(list_files), list_files);
 
     GButton(win_file, 19, 11, GVERT, GDISP, 2, buttons);
     repeat
@@ -77,12 +76,12 @@ begin
         GCombo(win_file, 21, 5, GDISP, selected_drive, 8, list_drives);
 
         // Files List
-        read_list:= GList(win_file, 2, 5, GEDIT, selected_list, 6, '', list_files);
+        read_list:= GList(win_file, 2, 5, GEDIT, selected_list, 6, Length(list_files), list_files);
         if (read_list <> XESC) then
         begin
             selected_list := read_list;
         end;
-        GList(win_file, 2, 5, GDISP, selected_list, 6, '', list_files);
+        GList(win_file, 2, 5, GDISP, selected_list, 6, Length(list_files), list_files);
 
         // Buttons to confirm
         bM := GButton(win_file, 19, 11, GVERT, GEDIT, 2, buttons);    

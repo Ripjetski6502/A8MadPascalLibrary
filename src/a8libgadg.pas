@@ -35,7 +35,7 @@ function GConfirm(pS: string[40-2]) : Boolean;
 function GButton(bN, x, y, bO, bD, bS: Byte; pA: TStringArray): Byte;
 function GCheck(bN, x, y, bI, bD: Byte): Byte;
 function GRadio(bN, x, y, bD, bE, bI, bS: Byte; pS: TStringArray): Byte;
-function GList(bN, x, y, bE, bI, bS: Byte; l: String[40-2]; pS: TStringArray): Byte;
+function GList(bN, x, y, bE, bI, bV, bS: Byte; pS: TStringArray): Byte;
 function GCombo(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
 function GSpin(bN, x, y, bL, bM, bI, bE: Byte): Byte;
 function GInput(bN, x, y, bT, bS: Byte; var pS: string): Byte;
@@ -454,64 +454,69 @@ end;
 //           y = Row of window to place list
 //          bE = Edit or display indicator (0 to display and exit)
 //          bI = Initial selected option
-//          bS = Size of the List to display
+//          bV = Size of the List to display
+//          bS = Number of items in the List
 //           l = Label showed for the list
 //          pS = Pointer to array of list option strings
 // ------------------------------------------------------------
-function GList(bN, x, y, bE, bI, bS: Byte; l: String[40-2]; pS: TStringArray): Byte;
+function GList(bN, x, y, bE, bI, bV, bS: Byte; pS: TStringArray): Byte;
 var
     bF: Boolean;
-    bL, bK, bC, xp, yp: Byte;
-    tmp, s: Byte;
+    bStart, bEnd, bK, bL, bC, yp: Byte;
+    tmp, size: Byte;
+    line: String[40];
 
 begin
     bF := false;
-    if Length(l) = 0 then l:= 'List:';
 
     // Set default return and current button tod default passed in
     Result := bI;
-    bC := bI;
+    bC := bI - 1; // calculate array index
+    bStart := 0;
+    size:=1;
 
     // Loop until exit
     while not bF do
     begin
         // Set drawing position
-        xp := 0;
-        yp := 1;
-
+        // xp := 0;
+        yp := 0;
+        bEnd := Min(bStart + bV - 1, bS - 1);
         // Display buttons
-        for bL := 0 to bS - 1 do
+        for bL := bStart to bEnd do
         begin
-            // If current item then add pointer, else space
-            if ((bL + 1) = bC) and (bE <> GDISP) then
-            begin
-                tmp:=WON;
-            end
-            else begin
-                tmp:=WOFF
-            end;
-            WPrint(bN, x + xp, y + yp, tmp, pS[bL]);
+            // If current item then add pointer
+            if (bL = bC)  then
+                tmp:=WON
+            else
+                tmp:=WOFF;
+            SetLength(line, size);
+            FillChar(@line[1], size, CHSPACE);
+            // clean line with spaces
+            WPrint(bN, x, y + yp, WOFF, line);
+            WPrint(bN, x, y + yp, tmp, pS[bL]);
             Inc(yp);
+            tmp:= Length(pS[bL]);
+            if size < tmp then size:= tmp;
+            
         end;
-        
 
         // If initial item is display only, set exit flag
         if bE = GDISP then
         begin
             // show selection
-            if bC = Result then
-            begin
-                WPrint(bN, x, y + bC, WON, pS[bC-1]);
-            end
-            else begin
-                WPrint(bN, x, y + bC, WON, pS[bC]);
-            end;
-            WPrint(bN, x, y, WOFF, l);
+            // if bC = Result then
+            // begin
+            //     WPrint(bN, x, y + bC, WON, pS[bC-1]);
+            // end
+            // else begin
+            //     WPrint(bN, x, y + bC, WON, pS[bC]);
+            // end;
+            // WPrint(bN, x, y, WOFF, l);
             bF := true;
         end
         // Not display, edit, do it.
         else begin
-            WPrint(bN, x, y, WON, l);
             // Get keystroke
             bK := WaitKCX(WOFF);
 
@@ -519,22 +524,16 @@ begin
             // Up or left
             if (bK = KLEFT) or (bK = KPLUS) or (bK = KUP) or (bK = KMINUS) then
             begin
-                // Decrement and check for underrun
-                Dec(bC);
-                if bC < 1 then
-                begin
-                    bC := 1;
-                end;
+                // // Decrement and check for underrun
+                if (bC < bS - 1) then Inc(bC);
+                if (bC > bStart + bV - 1) then Inc(bStart); 
             end
             // Down or right
             else if (bK = KRIGHT) or (bK = KASTER) or (bK = KDOWN) or (bK = KEQUAL) then
             begin
-                // Increment and check for overrun
-                Inc(bC);
-                if bC > bS then
-                begin
-                    bC := bS;
-                end;
+                // // Increment and check for overrun
+                if (bC > 0) then Dec(bC);
+                if (bC < bStart) then Dec(bStart)
             end
             // ESC
             else if bK = KESC then
@@ -545,12 +544,12 @@ begin
             // Space
             else if bK = KSPACE then
             begin
-                Result := bC;
+                Result := bC + 1;
             end
             // Tab or Enter
             else if (bK = KTAB) or (bK = KENTER) then
             begin
-                Result := bC;
+                Result := bC + 1;
                 bF := true;
             end;
         end;
