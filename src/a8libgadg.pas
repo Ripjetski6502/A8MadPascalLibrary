@@ -473,7 +473,9 @@ begin
     // Set default return and current button tod default passed in
     Result := bI;
     bC := bI - 1; // calculate array index
-    bStart := 0;
+    if bI > bV then
+        bStart := bI - bV
+    else bStart := 0;
     size:=0;
 
     // Loop until exit

@@ -1,0 +1,10502 @@
+; ------------------------------------------------------------
+; Mad Pascal Compiler version 1.6.6 [2022/04/28] for 6502
+; ------------------------------------------------------------
+
+STACKWIDTH	= 16
+CODEORIGIN	= $2000
+
+TRUE		= 1
+FALSE		= 0
+
+; ------------------------------------------------------------
+
+	org $80
+
+zpage
+
+.ifdef @vbxe_detect
+fxptr	.ds 2						; VBXE pointer
+.fi
+
+.if .def(@AllocMem)||.def(MAIN.SYSTEM.GETMEM)||.def(MAIN.SYSTEM.FREEMEM)
+psptr	.ds 2						; PROGRAMSTACK Pointer
+.fi
+
+bp	.ds 2
+bp2	.ds 2
+
+eax	.ds 4						;8 bytes (aex + edx) -> divREAL
+edx	.ds 4
+ecx	.ds 4
+
+TMP
+ztmp
+ztmp8	.ds 1
+ztmp9	.ds 1
+ztmp10	.ds 1
+ztmp11	.ds 1
+
+STACKORIGIN	.ds STACKWIDTH*4
+zpend
+
+; ------------------------------------------------------------
+
+ax	= eax
+al	= eax
+ah	= eax+1
+
+cx	= ecx
+cl	= ecx
+ch	= ecx+1
+
+dx	= edx
+dl	= edx
+dh	= edx+1
+
+	org eax
+
+FP1MAN0	.ds 1
+FP1MAN1	.ds 1
+FP1MAN2	.ds 1
+FP1MAN3	.ds 1
+
+	org ztmp8
+
+FP1SGN	.ds 1
+FP1EXP	.ds 1
+
+	org edx
+
+FP2MAN0	.ds 1
+FP2MAN1	.ds 1
+FP2MAN2	.ds 1
+FP2MAN3	.ds 1
+
+	org ztmp10
+
+FP2SGN	.ds 1
+FP2EXP	.ds 1
+
+	org ecx
+
+FPMAN0	.ds 1
+FPMAN1	.ds 1
+FPMAN2	.ds 1
+FPMAN3	.ds 1
+
+	org bp2
+
+FPSGN	.ds 1
+FPEXP	.ds 1
+
+	.ifdef MAIN.@DEFINES.BASICOFF
+	org CODEORIGIN
+	icl 'atari\basicoff.asm'
+	ini CODEORIGIN
+	.fi
+
+	.ifdef MAIN.@DEFINES.S_VBXE
+	opt h-
+	ins 'atari\s_vbxe\sdxld2.obx'
+	opt h+
+	.fi
+
+; ------------------------------------------------------------
+
+	org CODEORIGIN
+
+	STATICDATA
+
+; ------------------------------------------------------------
+
+RTLIB
+	icl 'rtl6502_a8.asm'
+
+.print 'ZPAGE: ',zpage,'..',zpend-1
+
+.print 'RTLIB: ',RTLIB,'..',*-1
+
+; ------------------------------------------------------------
+
+START
+	tsx
+	stx MAIN.@halt+1
+
+	.ifdef fmulinit
+	fmulinit
+	.fi
+
+VLEN	= VARDATASIZE-VARINITSIZE
+VADR	= DATAORIGIN+VARINITSIZE
+
+	ift VADR > $BFFF
+	ert 'Invalid memory address range ',VADR
+	eli (VLEN>0) && (VLEN<=256)
+	ldx #256-VLEN
+	lda #$00
+	sta:rne VADR+VLEN-256,x+
+	eli VLEN>256
+	@fill #VADR #VLEN #$00
+	eif
+
+.ifdef :psptr
+	mwa #PROGRAMSTACK :psptr
+.fi
+
+	.ifdef MAIN.@DEFINES.ROMOFF
+	icl 'atari\romoff.asm'
+	.fi
+
+	ldx #$0F					; DOS II+/D ParamStr
+	mva:rpl $340,x MAIN.IOCB@COPY,x-
+
+	inx						; X = 0
+	stx bp						; BP = 0
+
+	stx skctl					; reset POKEY
+	lda #3
+	sta skctl
+
+	dex						; X = 255
+
+	UNITINITIALIZATION
+
+.local	MAIN						; PROCEDURE
+
+	jmp l_04D9
+
+; ------------------------------------------------------------
+
+.local	SYSTEM						; UNIT
+
+.local	PEEK						; FUNCTION | ASSEMBLER | REGISTER
+
+; ------------------------------------------------------------
+
+; Generate Assignment for WORD / SMALLINT / SHORTREAL / POINTER
+; as Pointer
+	lda :STACKORIGIN,x
+	sta A
+	lda :STACKORIGIN+STACKWIDTH,x
+	sta A+1
+	dex
+@main
+
+; -------------------  ASM Block 00000002  -------------------
+
+	ldy #0
+	mva (:edx),y Result
+
+@exit
+
+; ------------------------------------------------------------
+
+; Push BYTE / CHAR / SHORTINT / BOOLEAN
+; as Pointer
+
+	inx
+	mva RESULT :STACKORIGIN,x
+
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	eif
+
+; ------------------------------------------------------------
+
+A	= :EDX
+RESULT	= :STACKORIGIN-4
+	rts						; ret
+.endl
+
+.local	DPEEK						; FUNCTION | ASSEMBLER | REGISTER
+
+; ------------------------------------------------------------
+
+; Generate Assignment for WORD / SMALLINT / SHORTREAL / POINTER
+; as Pointer
+	lda :STACKORIGIN,x
+	sta A
+	lda :STACKORIGIN+STACKWIDTH,x
+	sta A+1
+	dex
+@main
+
+; -------------------  ASM Block 00000003  -------------------
+
+	ldy #0
+	mva (:edx),y Result
+	iny
+	mva (:edx),y Result+1
+
+@exit
+
+; ------------------------------------------------------------
+
+; Push WORD / SMALLINT / SHORTREAL / POINTER
+; as Pointer
+
+	inx
+	mva RESULT :STACKORIGIN,x
+	mva RESULT+1 :STACKORIGIN+STACKWIDTH,x
+
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	eif
+
+; ------------------------------------------------------------
+
+A	= :EDX
+RESULT	= :STACKORIGIN-4
+	rts						; ret
+.endl
+
+.local	POKE						; PROCEDURE | ASSEMBLER | REGISTER
+
+; ------------------------------------------------------------
+
+; Generate Assignment for WORD / SMALLINT / SHORTREAL / POINTER
+; as Pointer
+	lda :STACKORIGIN,x
+	sta A
+	lda :STACKORIGIN+STACKWIDTH,x
+	sta A+1
+	dex
+	jmi @main
+
+; ------------------------------------------------------------
+
+; Generate Assignment for BYTE / CHAR / SHORTINT / BOOLEAN
+; as Pointer
+	lda :STACKORIGIN,x
+	sta VALUE
+	dex
+@main
+
+; -------------------  ASM Block 00000018  -------------------
+
+	ldy #0
+	mva value (:edx),y
+
+; ------------------------------------------------------------
+
+A	= :EDX
+VALUE	= :ECX
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	FILLCHAR_0529					; PROCEDURE | ASSEMBLER | OVERLOAD | REGISTER | INLINE
+
+	.MACRO m@INLINE
+
+; -------------------  ASM Block 00000020  -------------------
+
+	jsr @fill
+
+	.ENDM
+
+; ------------------------------------------------------------
+
+A	= :EDX
+COUNT	= :ECX
+VALUE	= :EAX
+@exit
+.endl
+
+.local	FILLCHAR_052A					; PROCEDURE | ASSEMBLER | OVERLOAD | REGISTER | INLINE
+
+	.MACRO m@INLINE
+
+; -------------------  ASM Block 00000021  -------------------
+
+	jsr @fill
+
+	.ENDM
+
+; ------------------------------------------------------------
+
+A	= :EDX
+COUNT	= :ECX
+VALUE	= :EAX
+@exit
+.endl
+
+.local	FILLCHAR_052B					; PROCEDURE | ASSEMBLER | OVERLOAD | REGISTER | INLINE
+
+	.MACRO m@INLINE
+
+; -------------------  ASM Block 00000024  -------------------
+
+	jsr @fill
+
+	.ENDM
+
+; ------------------------------------------------------------
+
+A	= :EDX
+COUNT	= :ECX
+VALUE	= :EAX
+@exit
+.endl
+
+.local	MOVE_052C					; PROCEDURE | ASSEMBLER | OVERLOAD | REGISTER | INLINE
+
+	.MACRO m@INLINE
+
+; -------------------  ASM Block 00000026  -------------------
+
+	jsr @move
+
+	.ENDM
+
+; ------------------------------------------------------------
+
+SOURCE	= :EDX
+DEST	= :ECX
+COUNT	= :EAX
+@exit
+.endl
+
+.local	SPACE						; FUNCTION | ASSEMBLER
+	sta B
+
+; -------------------  ASM Block 00000030  -------------------
+
+	ldy #0
+	lda #' '
+	sta:rne @buf,y+
+
+	mva b @buf
+
+	mwa #@buf Result
+
+@exit
+
+; ------------------------------------------------------------
+
+B	= DATAORIGIN+$000B
+RESULT	= DATAORIGIN+$000C
+
+@VarData	= B
+@VarDataSize	= 1
+
+	rts						; ret
+.endl
+
+.local	SETLENGTH					; PROCEDURE | ASSEMBLER | REGISTER
+
+; -------------------  ASM Block 00000032  -------------------
+
+	ldy #0
+	mva Len (:edx),y
+
+; ------------------------------------------------------------
+
+S	= :EDX
+LEN	= :ECX
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+; ------------------------------------------------------------
+
+__PORTB_BANKS	= $0101
+M_PI_2	= $0648
+D_PI_2	= $0192
+D_PI_180	= $04
+MGTIA	= $00
+MVBXE	= $80
+VBXE_XDLADR	= $00
+VBXE_BCBTMP	= $E0
+VBXE_BCBADR	= $0100
+VBXE_MAPADR	= $1000
+VBXE_CHBASE	= $1000
+VBXE_OVRADR	= $5000
+VBXE_WINDOW	= $B000
+IDLI	= $00
+IVBL	= $01
+IVBLD	= $01
+IVBLI	= $02
+ITIM1	= $03
+ITIM2	= $04
+ITIM4	= $05
+CH_DELCHR	= $FE
+CH_ENTER	= $9B
+CH_ESC	= $1B
+CH_CURS_UP	= $1C
+CH_CURS_DOWN	= $1D
+CH_CURS_LEFT	= $1E
+CH_CURS_RIGHT	= $1F
+CH_TAB	= $7F
+CH_EOL	= $9B
+CH_CLR	= $7D
+CH_BELL	= $FD
+CH_DEL	= $7E
+CH_DELLINE	= $9C
+CH_INSLINE	= $9D
+PAL_PMCOLOR0	= $00
+PAL_PMCOLOR1	= $01
+PAL_PMCOLOR2	= $02
+PAL_PMCOLOR3	= $03
+PAL_COLOR0	= $04
+PAL_COLOR1	= $05
+PAL_COLOR2	= $06
+PAL_COLOR3	= $07
+PAL_COLBAK	= $08
+COLOR_BLACK	= $00
+COLOR_WHITE	= $0E
+COLOR_RED	= $32
+COLOR_CYAN	= $96
+COLOR_VIOLET	= $68
+COLOR_GREEN	= $C4
+COLOR_BLUE	= $74
+COLOR_YELLOW	= $EE
+COLOR_ORANGE	= $28
+COLOR_BROWN	= $E4
+COLOR_LIGHTRED	= $3C
+COLOR_GRAY1	= $04
+COLOR_GRAY2	= $06
+COLOR_GRAY3	= $0A
+COLOR_LIGHTGREEN	= $CC
+COLOR_LIGHTBLUE	= $7C
+FMOPENREAD	= $04
+FMOPENWRITE	= $08
+FMOPENAPPEND	= $09
+FMOPENREADWRITE	= $0C
+SCREENWIDTH	= DATAORIGIN+$0000
+SCREENHEIGHT	= DATAORIGIN+$0002
+DATESEPARATOR	= DATAORIGIN+$0004
+RND	= $D20A
+adr.PALETTE	= $02C0
+.var PALETTE	= adr.PALETTE .word
+adr.HPALETTE	= $D012
+.var HPALETTE	= adr.HPALETTE .word
+FILEMODE	= DATAORIGIN+$0005
+GRAPHMODE	= DATAORIGIN+$0006
+IORESULT	= DATAORIGIN+$0007
+EOLN	= DATAORIGIN+$0008
+RNDSEED	= DATAORIGIN+$0009
+
+.endl							; UNIT SYSTEM
+
+; ------------------------------------------------------------
+
+.local	ATARI						; UNIT
+
+; ------------------------------------------------------------
+
+IRQENS	= $10
+RTCLOK	= $12
+RTCLOK1	= $12
+RTCLOK2	= $13
+RTCLOK3	= $14
+ATRACT	= $4D
+LMARGIN	= $52
+RMARGIN	= $53
+ROWCRS	= $54
+COLCRS	= $55
+DINDEX	= $57
+SAVMSC	= $58
+PALNTS	= $62
+RAMTOP	= $6A
+VDSLST	= $0200
+SDLSTL	= $0230
+TXTROW	= $0290
+TXTCOL	= $0291
+TINDEX	= $0293
+TXTMSC	= $0294
+SDMCTL	= $022F
+GPRIOR	= $026F
+CRSINH	= $02F0
+CHACT	= $02F3
+CHBAS	= $02F4
+CH	= $02FC
+FILDAT	= $02FD
+PCOLR0	= $02C0
+PCOLR1	= $02C1
+PCOLR2	= $02C2
+PCOLR3	= $02C3
+COLOR0	= $02C4
+COLOR1	= $02C5
+COLOR2	= $02C6
+COLOR3	= $02C7
+COLOR4	= $02C8
+COLBAKS	= $02C8
+HPOSP0	= $D000
+HPOSP1	= $D001
+HPOSP2	= $D002
+HPOSP3	= $D003
+HPOSM0	= $D004
+HPOSM1	= $D005
+HPOSM2	= $D006
+HPOSM3	= $D007
+SIZEP0	= $D008
+SIZEP1	= $D009
+SIZEP2	= $D00A
+SIZEP3	= $D00B
+SIZEM	= $D00C
+GRAFP0	= $D00D
+GRAFP1	= $D00E
+GRAFP2	= $D00F
+GRAFP3	= $D010
+GRAFM	= $D011
+P0PF	= $D004
+PAL	= $D014
+TRIG3	= $D013
+COLPM0	= $D012
+COLPM1	= $D013
+COLPM2	= $D014
+COLPM3	= $D015
+COLPF0	= $D016
+COLPF1	= $D017
+COLPF2	= $D018
+COLPF3	= $D019
+COLBK	= $D01A
+PRIOR	= $D01B
+GRACTL	= $D01D
+HITCLR	= $D01E
+CONSOL	= $D01F
+AUDF1	= $D200
+AUDC1	= $D201
+AUDF2	= $D202
+AUDC2	= $D203
+AUDF3	= $D204
+AUDC3	= $D205
+AUDF4	= $D206
+AUDC4	= $D207
+AUDCTL	= $D208
+KBCODE	= $D209
+IRQEN	= $D20E
+SKSTAT	= $D20F
+PORTA	= $D300
+PORTB	= $D301
+PACTL	= $D302
+DMACTL	= $D400
+CHACTL	= $D401
+DLISTL	= $D402
+HSCROL	= $D404
+VSCROL	= $D405
+PMBASE	= $D407
+CHBASE	= $D409
+WSYNC	= $D40A
+VCOUNT	= $D40B
+PENH	= $D40C
+PENV	= $D40D
+NMIEN	= $D40E
+NMIVEC	= $FFFA
+RESETVEC	= $FFFC
+IRQVEC	= $FFFE
+
+.endl							; UNIT ATARI
+
+; ------------------------------------------------------------
+
+.local	CRT						; UNIT
+
+.local	CLRSCR						; PROCEDURE
+
+; optimize FAIL ('@print', crt_atari.inc), line = 34
+
+	@print #$7D
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	DELAY						; PROCEDURE | ASSEMBLER
+
+; -------------------  ASM Block 00000054  -------------------
+
+	txa:pha
+
+	ldx #0
+	ldy #0
+
+loop	cpy count
+	bne @+
+	cpx count+1
+	beq stop
+
+@	:8 lda:cmp:req vcount
+
+	iny
+	sne
+	inx
+
+	bne loop
+
+stop	pla:tax
+
+; ------------------------------------------------------------
+
+COUNT	= DATAORIGIN+$000F
+
+@VarData	= COUNT
+@VarDataSize	= 2
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+; ------------------------------------------------------------
+
+TEXTATTR	= DATAORIGIN+$000E
+CONSOL	= $D01F
+CN_START_SELECT_OPTION	= $00
+CN_SELECT_OPTION	= $01
+CN_START_OPTION	= $02
+CN_OPTION	= $03
+CN_START_SELECT	= $04
+CN_SELECT	= $05
+CN_START	= $06
+CN_NONE	= $07
+BW40	= $00
+CO40	= $01
+BW80	= $02
+CO80	= $03
+MONO	= $07
+C40	= $01
+C80	= $03
+BLACK	= $00
+WHITE	= $0F
+RED	= $26
+CYAN	= $AC
+PURPLE	= $48
+GREEN	= $B6
+BLUE	= $86
+YELLOW	= $DC
+ORANGE	= $18
+BROWN	= $F4
+LIGHT_RED	= $2A
+DARK_GREY	= $04
+GREY	= $08
+LIGHT_GREEN	= $BC
+LIGHT_BLUE	= $9A
+LIGHT_GREY	= $0C
+BLINK	= $80
+
+.endl							; UNIT CRT
+
+; ------------------------------------------------------------
+
+.local	A8DEFINES					; UNIT
+
+; ------------------------------------------------------------
+
+adr.LIB_VERSION	= CODEORIGIN+$0000
+.var LIB_VERSION	= adr.LIB_VERSION .word
+WRECSZ	= $0A
+WBUFSZ	= $0814
+WON	= $01
+WOFF	= $00
+WPABS	= $80
+WPTOP	= $F1
+WPBOT	= $F2
+WPLFT	= $FB
+WPRGT	= $FC
+WPCNT	= $FF
+WENONE	= $64
+WENOPN	= $65
+WEUSED	= $66
+GDISP	= $00
+GEDIT	= $01
+GHORZ	= $01
+GVERT	= $02
+GCON	= $01
+GCOFF	= $02
+GANY	= $00
+GALNUM	= $01
+GALPHA	= $02
+GNUMER	= $03
+GFILE	= $04
+XESC	= $FD
+XTAB	= $FE
+XNONE	= $FF
+DMACTL	= $022F
+COLDST	= $0244
+GPRIOR	= $026F
+INVFLG	= $02B6
+SHFLOK	= $02BE
+HELPFG	= $02DC
+KEYPCH	= $02FC
+GRACTL	= $D01D
+CONSOL	= $D01F
+PMBASE	= $D407
+HPOSP0	= $D000
+HPOSP1	= $D001
+HPOSP2	= $D002
+ALMARG	= $52
+RSCRN	= $58
+PCOLR0	= $02C0
+PCOLR1	= $02C1
+PCOLR2	= $02C2
+PCOLR3	= $02C3
+AFOREG	= $02C5
+ABACKG	= $02C6
+ABORDR	= $02C8
+ACURIN	= $02F0
+CBLACK	= $00
+CWHITE	= $0E
+CGREEN	= $D2
+CBLUE	= $92
+CRED	= $32
+CYELLOW	= $DE
+KNOMAP	= $C7
+KNONE	= $FF
+KENTER	= $0C
+KDEL	= $34
+KDEL_S	= $74
+KDEL_C	= $B4
+KINS	= $B7
+KPLUS	= $06
+KASTER	= $07
+KMINUS	= $0E
+KEQUAL	= $0F
+KESC	= $1C
+KSPACE	= $21
+KINV	= $27
+KTAB	= $2C
+KTAB_S	= $6C
+KCAP	= $3C
+KLEFT	= $86
+KRIGHT	= $87
+KUP	= $8E
+KDOWN	= $8F
+KEYB	= $15
+KEYC	= $12
+KEYD	= $3A
+KEYH	= $39
+KEYN	= $23
+KEYP	= $0A
+KEYR	= $28
+KEYS	= $3E
+KEYT	= $2D
+KB_C	= $95
+KE_C	= $AA
+KX	= $16
+KX_S	= $56
+KE_CS	= $EA
+KS_CS	= $FE
+KCNON	= $07
+KCSTA	= $0106
+KCSEL	= $0105
+KCOPT	= $0103
+KFHLP	= $11
+KF1	= $03
+KF2	= $04
+KF3	= $13
+KF4	= $14
+CHBTRGT	= $03
+CHTPRGT	= $05
+CHTPLFT	= $11
+CHBTLFT	= $1A
+CHBALL	= $14
+CHESC	= $1B
+CHUP	= $1C
+CHDN	= $1D
+CHLFT	= $1E
+CHRGT	= $1F
+CHSPACE	= $20
+CHDMND	= $60
+CHCLS	= $7D
+CHBACK	= $7E
+CHTAB	= $7F
+CHENT	= $9B
+CHDELLN	= $9C
+CHINVSP	= $A0
+CHBUZ	= $FD
+CHRGT_I	= $9F
+CHO_L	= $6F
+CHI_I	= $C9
+CHDN_I	= $9D
+
+.endl							; UNIT A8DEFINES
+
+; ------------------------------------------------------------
+
+.local	A8DEFWIN					; UNIT
+
+; ------------------------------------------------------------
+
+.endl							; UNIT A8DEFWIN
+
+; ------------------------------------------------------------
+
+.local	A8LIBMISC					; UNIT
+
+.local	IKC2ATA						; FUNCTION
+	sta BN
+
+; optimize OK (A8LIBMISC), line = 67
+
+	cmp #$C0
+	jcs l_058E
+
+; optimize OK (A8LIBMISC), line = 69
+
+	ldy BN
+	lda adr.CL,y
+	sta RESULT
+	jmp l_05A1
+l_058E
+
+; optimize OK (A8LIBMISC), line = 73
+
+	lda BN
+	sta RESULT
+l_05A1
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0011
+RESULT	= DATAORIGIN+$0012
+adr.CL	= CODEORIGIN+$04D2
+.var CL	= adr.CL .word
+
+@VarData	= BN
+@VarDataSize	= 1
+
+	rts						; ret
+.endl
+
+.local	WAITKCX						; FUNCTION
+	sta BI
+
+; optimize OK (A8LIBMISC), line = 89
+
+	lda #$00
+	sta RESULT
+	sta RESULT+1
+
+; --- WhileProlog
+l_05B2
+
+; optimize OK (A8LIBMISC), line = 92
+
+	lda $02FC+1
+	bne @+
+	lda $02FC
+	cmp #$FF
+@
+	jne l_05B2w
+	lda $D01F
+	cmp #$07
+	jne l_05B2w
+	lda $02DC
+	jeq l_05B2
+l_05B2w
+
+; optimize OK (A8LIBMISC), line = 95
+
+	lda $02FC
+	sta BK
+
+; optimize OK (A8LIBMISC), line = 96
+
+	lda $D01F
+	sta BC
+
+; optimize OK (A8LIBMISC), line = 97
+
+	lda $02DC
+	sta BH
+
+; optimize OK (A8LIBMISC), line = 100
+
+	lda BC
+	cmp #$07
+	jeq l_05F4
+
+; optimize OK (A8LIBMISC), line = 102
+
+	sta RESULT
+	lda #$01
+	sta RESULT+1
+	jmp l_0608
+l_05F4
+
+; optimize OK (A8LIBMISC), line = 105
+
+	lda BH
+	jeq l_061A
+
+; optimize OK (A8LIBMISC), line = 107
+
+	lda #$11
+	sta RESULT
+	lda #$00
+	sta RESULT+1
+
+; optimize OK (A8LIBMISC), line = 108
+
+	sta $02DC
+	jmp l_062B
+l_061A
+
+; optimize OK (A8LIBMISC), line = 111
+
+	lda BK
+	cmp #$3C
+	jne l_063D
+
+; optimize OK (A8LIBMISC), line = 113
+
+	sta RESULT
+	lda #$00
+	sta RESULT+1
+
+; optimize OK (A8LIBMISC), line = 116
+
+	lda $02BE
+	sta BU
+
+; optimize OK (A8LIBMISC), line = 117
+
+	eor #$40
+	sta BU
+
+; optimize OK (A8LIBMISC), line = 118
+
+	sta $02BE
+	jmp l_0661
+l_063D
+
+; optimize OK (A8LIBMISC), line = 121
+
+	lda BK
+	cmp #$27
+	jne l_0673
+
+; optimize OK (A8LIBMISC), line = 123
+
+	sta RESULT
+	lda #$00
+	sta RESULT+1
+
+; optimize OK (A8LIBMISC), line = 126
+
+	lda BI
+	cmp #$01
+	jne l_068C
+
+; optimize OK (A8LIBMISC), line = 129
+
+	lda $02B6
+	sta BU
+
+; optimize OK (A8LIBMISC), line = 130
+
+	eor #$80
+	sta BU
+
+; optimize OK (A8LIBMISC), line = 131
+
+	sta $02B6
+l_068C
+	jmp l_06AC
+l_0673
+
+; optimize OK (A8LIBMISC), line = 136
+
+	lda BK
+	sta RESULT
+	lda #$00
+	sta RESULT+1
+l_06AC
+l_0661
+l_062B
+l_0608
+
+; optimize OK (A8LIBMISC), line = 140
+
+	lda #$FF
+	sta $02FC
+@exit
+
+; ------------------------------------------------------------
+
+BI	= DATAORIGIN+$0013
+RESULT	= DATAORIGIN+$0014
+BK	= DATAORIGIN+$0016
+BC	= DATAORIGIN+$0017
+BH	= DATAORIGIN+$0018
+BU	= DATAORIGIN+$0019
+
+@VarData	= BI
+@VarDataSize	= 5
+
+	rts						; ret
+.endl
+
+.local	MIN						; FUNCTION
+
+; optimize OK (A8LIBMISC), line = 149
+
+	lda X
+	cmp Y
+	jcs l_06CD
+	sta RESULT
+	jmp l_06DD
+l_06CD
+	lda Y
+	sta RESULT
+l_06DD
+@exit
+
+; ------------------------------------------------------------
+
+X	= DATAORIGIN+$001A
+Y	= DATAORIGIN+$001B
+RESULT	= DATAORIGIN+$001C
+
+@VarData	= X
+@VarDataSize	= 2
+
+	rts						; ret
+.endl
+
+; ------------------------------------------------------------
+
+.endl							; UNIT A8LIBMISC
+
+; ------------------------------------------------------------
+
+.local	A8LIBSTR					; UNIT
+
+.local	STRINV						; PROCEDURE
+
+; optimize OK (A8LIBSTR), line = 45
+
+	lda #$00
+	sta BL
+	ldy BS
+	dey
+	sty @FORTMP_06F3_0
+
+l_06F6
+; --- ForToDoCondition
+	lda @FORTMP_06F3_0:#$00
+	cmp BL
+	jcc l_0704
+
+; optimize OK (A8LIBSTR), line = 48
+
+	mwy PS :bp2
+	ldy #$00
+	lda (:bp2),y
+	eor #$80
+	sta (:bp2),y
+
+; optimize FAIL (0, A8LIBSTR), line = 49
+
+	inc PS
+	sne
+	inc PS+1
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_06F6
+l_0704
+
+; ------------------------------------------------------------
+
+PS	= DATAORIGIN+$001D
+BS	= DATAORIGIN+$001F
+BL	= DATAORIGIN+$0020
+
+@VarData	= PS
+@VarDataSize	= 4
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	STRAI						; PROCEDURE
+
+; optimize OK (A8LIBSTR), line = 67
+
+	lda #$00
+	sta BL
+	ldy BS
+	dey
+	sty @FORTMP_0727_0
+
+l_072A
+; --- ForToDoCondition
+	lda @FORTMP_0727_0:#$00
+	cmp BL
+	jcc l_0738
+
+; optimize OK (A8LIBSTR), line = 69
+
+	mvy PS+1 :bp+1
+	ldy PS
+	mvy PS+1 :bp+1
+	ldy PS
+	lda (:bp),y
+	cmp #$20
+	jcs l_0756
+
+; optimize OK (A8LIBSTR), line = 71
+
+	mwy PS :bp2
+	ldy #$00
+	lda (:bp2),y
+	add #$40
+	sta (:bp2),y
+	jmp l_076A
+l_0756
+
+; optimize OK (A8LIBSTR), line = 73
+
+	mvy PS+1 :bp+1
+	ldy PS
+	lda (:bp),y
+	cmp #$20
+	jcc l_0788
+	mvy PS+1 :bp+1
+	ldy PS
+	lda (:bp),y
+	cmp #$60
+	jcs l_0788
+
+; optimize OK (A8LIBSTR), line = 75
+
+	mwy PS :bp2
+	ldy #$00
+	lda (:bp2),y
+	sub #$20
+	sta (:bp2),y
+	jmp l_079C
+l_0788
+
+; optimize OK (A8LIBSTR), line = 77
+
+	mvy PS+1 :bp+1
+	ldy PS
+	lda (:bp),y
+	jpl l_07BA
+	mvy PS+1 :bp+1
+	ldy PS
+	lda (:bp),y
+	cmp #$A0
+	jcs l_07BA
+
+; optimize OK (A8LIBSTR), line = 79
+
+	mwy PS :bp2
+	ldy #$00
+	lda (:bp2),y
+	add #$40
+	sta (:bp2),y
+	jmp l_07CE
+l_07BA
+
+; optimize OK (A8LIBSTR), line = 81
+
+	mvy PS+1 :bp+1
+	ldy PS
+	lda (:bp),y
+	cmp #$A0
+	jcc l_07EC
+	mvy PS+1 :bp+1
+	ldy PS
+	lda (:bp),y
+	cmp #$E0
+	jcs l_07EC
+
+; optimize OK (A8LIBSTR), line = 83
+
+	mwy PS :bp2
+	ldy #$00
+	lda (:bp2),y
+	sub #$20
+	sta (:bp2),y
+l_07EC
+l_07CE
+l_079C
+l_076A
+
+; optimize FAIL (0, A8LIBSTR), line = 87
+
+	inc PS
+	sne
+	inc PS+1
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_072A
+l_0738
+
+; ------------------------------------------------------------
+
+PS	= DATAORIGIN+$0022
+BS	= DATAORIGIN+$0024
+BL	= DATAORIGIN+$0025
+
+@VarData	= PS
+@VarDataSize	= 4
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	CHARAI						; FUNCTION
+	sta BC
+
+; optimize OK (A8LIBSTR), line = 99
+
+	lda #$1F
+	cmp BC
+	jcc l_0824
+
+; optimize OK (A8LIBSTR), line = 101
+
+	lda BC
+	add #$40
+	sta RESULT
+	jmp l_0838
+l_0824
+
+; optimize OK (A8LIBSTR), line = 103
+
+	lda BC
+	cmp #$20
+	jcc l_0856
+	lda #$5F
+	cmp BC
+	jcc l_0856
+
+; optimize OK (A8LIBSTR), line = 105
+
+	lda BC
+	sub #$20
+	sta RESULT
+	jmp l_086A
+l_0856
+
+; optimize OK (A8LIBSTR), line = 107
+
+	lda BC
+	jpl l_0888
+	lda #$9F
+	cmp BC
+	jcc l_0888
+
+; optimize OK (A8LIBSTR), line = 109
+
+	lda BC
+	add #$40
+	sta RESULT
+	jmp l_089C
+l_0888
+
+; optimize OK (A8LIBSTR), line = 111
+
+	lda BC
+	cmp #$A0
+	jcc l_08BA
+	lda #$DF
+	cmp BC
+	jcc l_08BA
+
+; optimize OK (A8LIBSTR), line = 113
+
+	lda BC
+	sub #$20
+	sta RESULT
+	jmp l_08CE
+l_08BA
+
+; optimize OK (A8LIBSTR), line = 116
+
+	lda BC
+	sta RESULT
+l_08CE
+l_089C
+l_086A
+l_0838
+@exit
+
+; ------------------------------------------------------------
+
+BC	= DATAORIGIN+$0027
+RESULT	= DATAORIGIN+$0028
+
+@VarData	= BC
+@VarDataSize	= 1
+
+	rts						; ret
+.endl
+
+.local	BYTETOSTR3					; FUNCTION
+	sta BN
+
+	ldy #256-4
+	mva:rne CODEORIGIN+$0007+4-256,y adr.RESULT+4-256,y+
+
+; optimize OK (A8LIBSTR), line = 129
+
+	lda BN
+	sta :al
+	lda #$0A
+	sta :cl
+	jsr idivAL_CL.MOD
+	lda #$30
+	add :ztmp8
+	sta adr.RESULT+$03
+
+; optimize OK (A8LIBSTR), line = 130
+
+	lda BN
+	cmp #$0A
+	jcc l_08FE
+
+; optimize OK (A8LIBSTR), line = 132
+
+	lsr @
+	sta :eax
+	lsr @
+	adc :eax
+	ror @
+	lsr @
+	lsr @
+	adc :eax
+	ror @
+	adc :eax
+	ror @
+	lsr @
+	lsr @
+	sta BN
+
+; optimize OK (A8LIBSTR), line = 133
+
+	sta :al
+	lda #$0A
+	sta :cl
+	jsr idivAL_CL.MOD
+	lda #$30
+	add :ztmp8
+	sta adr.RESULT+$02
+
+; optimize OK (A8LIBSTR), line = 134
+
+	lda BN
+	cmp #$0A
+	jcc l_0931
+
+; optimize OK (A8LIBSTR), line = 136
+
+	lsr @
+	sta :eax
+	lsr @
+	adc :eax
+	ror @
+	lsr @
+	lsr @
+	adc :eax
+	ror @
+	adc :eax
+	ror @
+	lsr @
+	lsr @
+	sta BN
+
+; optimize OK (A8LIBSTR), line = 137
+
+	sta :al
+	lda #$0A
+	sta :cl
+	jsr idivAL_CL.MOD
+	lda #$30
+	add :ztmp8
+	sta adr.RESULT+$01
+l_0931
+l_08FE
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0029
+adr.RESULT	= [DATAORIGIN+$002A] .array [4]
+.var RESULT	= adr.RESULT .word
+
+@VarData	= BN
+@VarDataSize	= 5
+
+	rts						; ret
+.endl
+
+; ------------------------------------------------------------
+
+.endl							; UNIT A8LIBSTR
+
+; ------------------------------------------------------------
+
+.local	DOS						; UNIT
+
+; ------------------------------------------------------------
+
+PALNTSC	= $D014
+
+.endl							; UNIT DOS
+
+; ------------------------------------------------------------
+
+.local	STRUTILS					; UNIT
+
+; ------------------------------------------------------------
+
+.endl							; UNIT STRUTILS
+
+; ------------------------------------------------------------
+
+.local	SYSUTILS					; UNIT
+
+; ------------------------------------------------------------
+
+FAREADONLY	= $01
+FAHIDDEN	= $02
+FASYSFILE	= $04
+FAVOLUMEID	= $08
+FADIRECTORY	= $10
+FAARCHIVE	= $20
+FAANYFILE	= $3F
+
+.endl							; UNIT SYSUTILS
+
+; ------------------------------------------------------------
+
+.local	A8LIBWIN					; UNIT
+
+.local	WINIT						; PROCEDURE
+
+; optimize OK (A8LIBWIN), line = 63
+
+	lda #$01
+	sta $02F0
+
+; optimize OK (A8LIBWIN), line = 64
+
+	lda #$00
+	sta $0052
+
+; optimize FAIL ('CRT.CLRSCR', A8LIBWIN), line = 65
+
+	jsr CRT.CLRSCR
+
+; optimize OK (A8LIBWIN), line = 68
+
+	lda BAWM
+	sta SYSTEM.FILLCHAR_052A.A
+	lda BAWM+1
+	sta SYSTEM.FILLCHAR_052A.A+1
+	lda #$14
+	sta SYSTEM.FILLCHAR_052A.COUNT
+	lda #$08
+	sta SYSTEM.FILLCHAR_052A.COUNT+1
+	lda #$00
+	sta SYSTEM.FILLCHAR_052A.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_052A
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 71
+
+	lda BAWM
+	sta CPWM
+	lda BAWM+1
+	sta CPWM+1
+
+; optimize OK (A8LIBWIN), line = 74
+
+	lda #$00
+	sta BL
+
+l_09A5
+; --- ForToDoCondition
+	ldy BL
+	cpy #$0B
+	jcs l_09B3
+
+; optimize OK (A8LIBWIN), line = 77
+
+	lda #$00
+	sta adr.BAW.BU,y
+
+; optimize OK (A8LIBWIN), line = 78
+
+	sta adr.BAW.BX,y
+
+; optimize OK (A8LIBWIN), line = 79
+
+	sta adr.BAW.BY,y
+
+; optimize OK (A8LIBWIN), line = 80
+
+	sta adr.BAW.BW,y
+
+; optimize OK (A8LIBWIN), line = 81
+
+	sta adr.BAW.BH,y
+
+; optimize OK (A8LIBWIN), line = 82
+
+	sta adr.BAW.BI,y
+
+; optimize OK (A8LIBWIN), line = 83
+
+	lda BL
+	asl @
+	tay
+	lda BAWM
+	sta adr.BAW.CM,y
+	lda BAWM+1
+	sta adr.BAW.CM+1,y
+
+; optimize OK (A8LIBWIN), line = 84
+
+	lda #$00
+	sta adr.BAW.CZ,y
+	sta adr.BAW.CZ+1,y
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_09A5
+l_09B3
+
+; optimize OK (A8LIBWIN), line = 88
+
+	lda #$00
+	sta VCUR.VX
+
+; optimize OK (A8LIBWIN), line = 89
+
+	sta VCUR.VY
+
+; ------------------------------------------------------------
+
+BL	= DATAORIGIN+$08B4
+
+@VarData	= BL
+@VarDataSize	= 1
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	WBACK						; PROCEDURE
+	sta BN
+
+; optimize OK (A8LIBWIN), line = 101
+
+	lda $0058
+	sta SYSTEM.FILLCHAR_052A.A
+	lda $0058+1
+	sta SYSTEM.FILLCHAR_052A.A+1
+	lda #$C0
+	sta SYSTEM.FILLCHAR_052A.COUNT
+	lda #$03
+	sta SYSTEM.FILLCHAR_052A.COUNT+1
+	lda BN
+	sta SYSTEM.FILLCHAR_052A.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_052A
+	m@INLINE
+	.endl
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$08B5
+
+@VarData	= BN
+@VarDataSize	= 1
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	WOPEN						; FUNCTION
+
+; optimize OK (A8LIBWIN), line = 125
+
+	lda #$64
+	sta RESULT
+
+; optimize OK (A8LIBWIN), line = 128
+
+	lda #$00
+	sta BL
+
+l_0A14
+; --- ForToDoCondition
+	ldy BL
+	cpy #$0B
+	jcs l_0A22
+
+; optimize OK (A8LIBWIN), line = 131
+
+	lda adr.BAW.BU,y
+	jne l_0A37
+
+; optimize OK (A8LIBWIN), line = 134
+
+	lda #$01
+	sta adr.BAW.BU,y
+
+; optimize OK (A8LIBWIN), line = 137
+
+	lda BL
+	asl @
+	tay
+	lda CPWM
+	sta adr.BAW.CM,y
+	lda CPWM+1
+	sta adr.BAW.CM+1,y
+
+; optimize OK (A8LIBWIN), line = 138
+
+	lda BL
+	sta :STACKORIGIN+9
+	lda #$00
+	asl :STACKORIGIN+9
+	rol @
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda H
+	sta :ecx
+	lda W
+	sta :eax
+	.ifdef fmulinit
+	fmulu_8
+	els
+	imulCL
+	eif
+	lda :eax
+	sta :STACKORIGIN+10
+	lda :eax+1
+	sta :STACKORIGIN+STACKWIDTH+10
+	lda :STACKORIGIN+9
+	add #$00
+	tay
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda :STACKORIGIN+10
+	sta adr.BAW.CZ,y
+	lda :STACKORIGIN+STACKWIDTH+10
+	sta adr.BAW.CZ+1,y
+
+; optimize OK (A8LIBWIN), line = 141
+
+	ldy BL
+	lda X
+	sta adr.BAW.BX,y
+
+; optimize OK (A8LIBWIN), line = 142
+
+	lda Y
+	sta adr.BAW.BY,y
+
+; optimize OK (A8LIBWIN), line = 143
+
+	lda W
+	sta adr.BAW.BW,y
+
+; optimize OK (A8LIBWIN), line = 144
+
+	lda H
+	sta adr.BAW.BH,y
+
+; optimize OK (A8LIBWIN), line = 145
+
+	lda BT
+	sta adr.BAW.BI,y
+
+; optimize OK (A8LIBWIN), line = 148
+
+	lda $0058
+	sta :STACKORIGIN+9
+	lda $0058+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda Y
+	jsr @mul40
+	add :STACKORIGIN+9
+	tay
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc :eax+1
+	sta PS+1
+	tya
+	add X
+	sta PS
+	scc
+	inc PS+1
+
+; optimize OK (A8LIBWIN), line = 151
+
+	lda #$00
+	sta BD
+	ldy H
+	dey
+	sty @FORTMP_0AA4_0
+
+l_0AA7
+; --- ForToDoCondition
+	lda @FORTMP_0AA4_0:#$00
+	cmp BD
+	jcc l_0AB5
+
+; optimize OK (A8LIBWIN), line = 156
+
+	lda BD
+	jeq l_0AD9x
+	lda H
+	sub #$01
+	cmp BD
+	jne l_0AD9
+l_0AD9x
+
+; optimize OK (A8LIBWIN), line = 159
+
+	lda <adr.CL
+	sta SYSTEM.FILLCHAR_052A.A
+	lda >adr.CL
+	sta SYSTEM.FILLCHAR_052A.A+1
+	lda W
+	sta SYSTEM.FILLCHAR_052A.COUNT
+	lda #$00
+	sta SYSTEM.FILLCHAR_052A.COUNT+1
+	lda #$52
+	sta SYSTEM.FILLCHAR_052A.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_052A
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 162
+
+	lda BD
+	jne l_0AF2
+
+; optimize OK (A8LIBWIN), line = 164
+
+	lda #$51
+	sta adr.CL+$00
+
+; optimize OK (A8LIBWIN), line = 165
+
+	ldy W
+	lda #$45
+	sta adr.CL-$01,y
+	jmp l_0B0C
+l_0AF2
+
+; optimize OK (A8LIBWIN), line = 169
+
+	lda #$5A
+	sta adr.CL+$00
+
+; optimize OK (A8LIBWIN), line = 170
+
+	ldy W
+	lda #$43
+	sta adr.CL-$01,y
+l_0B0C
+	jmp l_0B25
+l_0AD9
+
+; optimize OK (A8LIBWIN), line = 176
+
+	lda <adr.CL
+	sta SYSTEM.FILLCHAR_052A.A
+	lda >adr.CL
+	sta SYSTEM.FILLCHAR_052A.A+1
+	lda W
+	sta SYSTEM.FILLCHAR_052A.COUNT
+	lda #$00
+	sta SYSTEM.FILLCHAR_052A.COUNT+1
+	sta SYSTEM.FILLCHAR_052A.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_052A
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 177
+
+	lda #$7C
+	sta adr.CL+$00
+
+; optimize OK (A8LIBWIN), line = 178
+
+	ldy W
+	sta adr.CL-$01,y
+l_0B25
+
+; optimize OK (A8LIBWIN), line = 182
+
+	lda BT
+	cmp #$01
+	jne l_0B4D
+
+; optimize OK (A8LIBWIN), line = 184
+
+	lda #$00
+	sta BC
+	ldy W
+	dey
+	sty @FORTMP_0B5A_0
+
+l_0B5D
+; --- ForToDoCondition
+	lda @FORTMP_0B5A_0:#$00
+	cmp BC
+	jcc l_0B6B
+
+; optimize OK (A8LIBWIN), line = 186
+
+	ldy BC
+	lda adr.CL,y
+	eor #$80
+	sta adr.CL,y
+
+; --- ForToDoEpilog
+	inc BC
+	jne l_0B5D
+l_0B6B
+l_0B4D
+
+; optimize OK (A8LIBWIN), line = 191
+
+	lda PS
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda PS+1
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda CPWM
+	sta SYSTEM.MOVE_052C.DEST
+	lda CPWM+1
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda W
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 193
+
+	lda CPWM
+	add W
+	sta CPWM
+	scc
+	inc CPWM+1
+
+; optimize OK (A8LIBWIN), line = 195
+
+	lda <adr.CL
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.CL
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda PS
+	sta SYSTEM.MOVE_052C.DEST
+	lda PS+1
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda W
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 197
+
+	lda PS
+	add #$28
+	sta PS
+	scc
+	inc PS+1
+
+; --- ForToDoEpilog
+	inc BD
+	jne l_0AA7
+l_0AB5
+
+; optimize OK (A8LIBWIN), line = 201
+
+	lda BL
+	sta RESULT
+	jmp b_0A14					; break
+l_0A37
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_0A14
+l_0A22
+b_0A14
+@exit
+
+; ------------------------------------------------------------
+
+X	= DATAORIGIN+$08B6
+Y	= DATAORIGIN+$08B7
+W	= DATAORIGIN+$08B8
+H	= DATAORIGIN+$08B9
+BT	= DATAORIGIN+$08BA
+RESULT	= DATAORIGIN+$08BB
+BL	= DATAORIGIN+$08BC
+BD	= DATAORIGIN+$08BD
+BC	= DATAORIGIN+$08BE
+adr.CL	= [DATAORIGIN+$08BF] .array [41]
+.var CL	= adr.CL .word
+PS	= DATAORIGIN+$08E8
+
+@VarData	= X
+@VarDataSize	= 51
+
+	rts						; ret
+.endl
+
+.local	WCLOSE						; FUNCTION
+	sta BN
+
+; optimize OK (A8LIBWIN), line = 223
+
+	lda #$65
+	sta RESULT
+
+; optimize OK (A8LIBWIN), line = 226
+
+	ldy BN
+	lda adr.BAW.BU,y
+	cmp #$01
+	jne l_0BC4
+
+; optimize OK (A8LIBWIN), line = 229
+
+	lda $0058
+	sta :STACKORIGIN+9
+	lda $0058+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda adr.BAW.BY,y
+	jsr @mul40
+	add :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc :eax+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	ldy BN
+	lda :STACKORIGIN+9
+	add adr.BAW.BX,y
+	sta PS
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc #$00
+	sta PS+1
+
+; optimize OK (A8LIBWIN), line = 232
+
+	lda BN
+	asl @
+	tay
+	lda adr.BAW.CM,y
+	sta PA
+	lda adr.BAW.CM+1,y
+	sta PA+1
+
+; optimize OK (A8LIBWIN), line = 235
+
+	lda #$00
+	sta BL
+	ldy BN
+	lda adr.BAW.BH,y
+	sub #$01
+	sta @FORTMP_0BF7_0
+
+l_0BFA
+; --- ForToDoCondition
+	lda @FORTMP_0BF7_0:#$00
+	cmp BL
+	jcc l_0C08
+
+; optimize OK (A8LIBWIN), line = 238
+
+	ldy BN
+	lda adr.BAW.BW,y
+	sta SYSTEM.MOVE_052C.COUNT
+	lda PA
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda PA+1
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda PS
+	sta SYSTEM.MOVE_052C.DEST
+	lda PS+1
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 240
+
+	ldy BN
+	lda PA
+	add adr.BAW.BW,y
+	sta PA
+	scc
+	inc PA+1
+
+; optimize OK (A8LIBWIN), line = 242
+
+	lda PS
+	add #$28
+	sta PS
+	scc
+	inc PS+1
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_0BFA
+l_0C08
+
+; optimize OK (A8LIBWIN), line = 246
+
+	lda BN
+	asl @
+	tay
+	lda adr.BAW.CZ,y
+	sta SYSTEM.FILLCHAR_052A.COUNT
+	lda adr.BAW.CZ+1,y
+	sta SYSTEM.FILLCHAR_052A.COUNT+1
+	lda adr.BAW.CM,y
+	sta SYSTEM.FILLCHAR_052A.A
+	lda adr.BAW.CM+1,y
+	sta SYSTEM.FILLCHAR_052A.A+1
+	lda #$00
+	sta SYSTEM.FILLCHAR_052A.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_052A
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 249
+
+	lda BN
+	asl @
+	tay
+	lda CPWM
+	sub adr.BAW.CZ,y
+	sta CPWM
+	lda CPWM+1
+	sbc adr.BAW.CZ+1,y
+	sta CPWM+1
+
+; optimize OK (A8LIBWIN), line = 252
+
+	ldy BN
+	lda #$00
+	sta adr.BAW.BU,y
+
+; optimize OK (A8LIBWIN), line = 253
+
+	sta adr.BAW.BX,y
+
+; optimize OK (A8LIBWIN), line = 254
+
+	sta adr.BAW.BY,y
+
+; optimize OK (A8LIBWIN), line = 255
+
+	sta adr.BAW.BW,y
+
+; optimize OK (A8LIBWIN), line = 256
+
+	sta adr.BAW.BH,y
+
+; optimize OK (A8LIBWIN), line = 257
+
+	sta adr.BAW.BI,y
+
+; optimize OK (A8LIBWIN), line = 258
+
+	lda BN
+	asl @
+	tay
+	lda BAWM
+	sta adr.BAW.CM,y
+	lda BAWM+1
+	sta adr.BAW.CM+1,y
+
+; optimize OK (A8LIBWIN), line = 259
+
+	lda #$00
+	sta adr.BAW.CZ,y
+	sta adr.BAW.CZ+1,y
+
+; optimize OK (A8LIBWIN), line = 262
+
+	sta RESULT
+l_0BC4
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$08EC
+RESULT	= DATAORIGIN+$08ED
+BL	= DATAORIGIN+$08EE
+PS	= DATAORIGIN+$08EF
+PA	= DATAORIGIN+$08F1
+
+@VarData	= BN
+@VarDataSize	= 6
+
+	rts						; ret
+.endl
+
+.local	WSTAT						; FUNCTION
+	sta BN
+
+; optimize OK (A8LIBWIN), line = 276
+
+	ldy BN
+	lda adr.BAW.BU,y
+	sta RESULT
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$08F4
+RESULT	= DATAORIGIN+$08F5
+
+@VarData	= BN
+@VarDataSize	= 1
+
+	rts						; ret
+.endl
+
+.local	WPOS						; FUNCTION
+
+; optimize OK (A8LIBWIN), line = 291
+
+	lda #$00
+	sta RESULT
+
+; optimize OK (A8LIBWIN), line = 294
+
+	lda BN
+	cmp #$80
+	jne l_0CA5
+
+; optimize OK (A8LIBWIN), line = 297
+
+	lda X
+	sta VCUR.VX
+
+; optimize OK (A8LIBWIN), line = 298
+
+	lda Y
+	sta VCUR.VY
+	jmp l_0CBB
+l_0CA5
+
+; optimize OK (A8LIBWIN), line = 303
+
+	ldy BN
+	lda adr.BAW.BU,y
+	cmp #$01
+	jne l_0CD0
+
+; optimize OK (A8LIBWIN), line = 306
+
+	lda adr.BAW.BX,y
+	add X
+	sta VCUR.VX
+
+; optimize OK (A8LIBWIN), line = 307
+
+	lda adr.BAW.BY,y
+	add Y
+	sta VCUR.VY
+l_0CD0
+l_0CBB
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$08F6
+X	= DATAORIGIN+$08F7
+Y	= DATAORIGIN+$08F8
+RESULT	= DATAORIGIN+$08F9
+
+@VarData	= BN
+@VarDataSize	= 3
+
+	rts						; ret
+.endl
+
+.local	WPUT						; FUNCTION
+
+; optimize OK (A8LIBWIN), line = 326
+
+	lda #$65
+	sta RESULT
+
+; optimize OK (A8LIBWIN), line = 329
+
+	lda X
+	sta BT
+
+; optimize OK (A8LIBWIN), line = 332
+
+	ldy BN
+	lda adr.BAW.BU,y
+	cmp #$01
+	jne l_0D14
+
+; optimize OK (A8LIBWIN), line = 335
+
+	lda adr.BAW.BI,y
+	cmp #$01
+	jne l_0D2A
+
+; optimize OK (A8LIBWIN), line = 337
+
+	lda BT
+	eor #$80
+	sta BT
+l_0D2A
+
+; optimize OK (A8LIBWIN), line = 341
+
+	lda $0058
+	sta :STACKORIGIN+9
+	lda $0058+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda VCUR.VY
+	jsr @mul40
+	add :STACKORIGIN+9
+	tay
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc :eax+1
+	sta CS+1
+	tya
+	add VCUR.VX
+	sta CS
+	scc
+	inc CS+1
+
+; optimize OK (A8LIBWIN), line = 342
+
+	lda X
+	jsr A8LIBSTR.CHARAI
+	inx
+	mva A8LIBSTR.CHARAI.RESULT :STACKORIGIN,x
+	inx
+	mva CS :STACKORIGIN,x
+	mva CS+1 :STACKORIGIN+STACKWIDTH,x
+	jsr SYSTEM.POKE
+
+; optimize FAIL (0, A8LIBWIN), line = 345
+
+	inc VCUR.VX
+
+; optimize OK (A8LIBWIN), line = 348
+
+	lda #$00
+	sta RESULT
+l_0D14
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$08FA
+X	= DATAORIGIN+$08FB
+RESULT	= DATAORIGIN+$08FC
+BT	= DATAORIGIN+$08FD
+CS	= DATAORIGIN+$08FE
+
+@VarData	= BN
+@VarDataSize	= 5
+
+	rts						; ret
+.endl
+
+.local	WPRINT						; FUNCTION
+
+; ------------------------------------------------------------
+
+; Generate Assignment for BYTE / CHAR / SHORTINT / BOOLEAN
+; as Pointer
+	lda :STACKORIGIN,x
+	sta BN
+	dex
+	jmi @main
+
+; ------------------------------------------------------------
+
+; Generate Assignment for BYTE / CHAR / SHORTINT / BOOLEAN
+; as Pointer
+	lda :STACKORIGIN,x
+	sta X
+	dex
+	jmi @main
+
+; ------------------------------------------------------------
+
+; Generate Assignment for BYTE / CHAR / SHORTINT / BOOLEAN
+; as Pointer
+	lda :STACKORIGIN,x
+	sta Y
+	dex
+	jmi @main
+
+; ------------------------------------------------------------
+
+; Generate Assignment for BYTE / CHAR / SHORTINT / BOOLEAN
+; as Pointer
+	lda :STACKORIGIN,x
+	sta BI
+	dex
+	jmi @main
+
+; ------------------------------------------------------------
+
+; Generate Assignment for WORD / SMALLINT / SHORTREAL / POINTER
+; as Pointer
+	lda :STACKORIGIN,x
+	sta :bp2
+	lda :STACKORIGIN+STACKWIDTH,x
+	sta :bp2+1
+	ldy #$00
+	mva:rne (:bp2),y adr.PS,y+
+	mwa #adr.PS PS
+	dex
+@main
+
+; optimize OK (A8LIBWIN), line = 371
+
+	lda #$65
+	sta RESULT
+
+; optimize OK (A8LIBWIN), line = 374
+
+	ldy BN
+	lda adr.BAW.BU,y
+	cmp #$01
+	jne l_0D89
+
+; optimize OK (A8LIBWIN), line = 377
+
+	lda adr.PS
+	sta BL
+
+; optimize OK (A8LIBWIN), line = 378
+
+	lda CL
+	sta SYSTEM.SETLENGTH.S
+	lda CL+1
+	sta SYSTEM.SETLENGTH.S+1
+	lda BL
+	sta SYSTEM.SETLENGTH.LEN
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBWIN), line = 379
+
+	lda <adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda <adr.PS+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.PS+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda BL
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 388
+
+	lda X
+	cmp #$FF
+	jeq l_0DC6
+	ldy BN
+	lda adr.BAW.BW,y
+	sub X
+	sta :STACKORIGIN+11
+	lda #$00
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH+11
+	lda #$00
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH*2+11
+	lda #$00
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH*3+11
+	lda :STACKORIGIN+11
+	sub #$01
+	sta :STACKORIGIN+11
+	lda :STACKORIGIN+STACKWIDTH+11
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH+11
+	lda :STACKORIGIN+STACKWIDTH*2+11
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH*2+11
+	lda :STACKORIGIN+STACKWIDTH*3+11
+	sbc #$00
+	bne @+
+	lda :STACKORIGIN+STACKWIDTH*2+11
+	bne @+
+	lda :STACKORIGIN+STACKWIDTH+11
+	bne @+
+	lda BL
+	cmp :STACKORIGIN+11
+@
+	jcc l_0DC6
+	jeq l_0DC6
+
+; optimize OK (A8LIBWIN), line = 391
+
+	lda adr.BAW.BW,y
+	sub X
+	sub #$01
+	sta BL
+
+; optimize OK (A8LIBWIN), line = 392
+
+	lda CL
+	sta SYSTEM.SETLENGTH.S
+	lda CL+1
+	sta SYSTEM.SETLENGTH.S+1
+	lda BL
+	sta SYSTEM.SETLENGTH.LEN
+	jsr SYSTEM.SETLENGTH
+l_0DC6
+
+; optimize OK (A8LIBWIN), line = 396
+
+	lda <adr.CL+$01
+	sta A8LIBSTR.STRAI.PS
+	lda >adr.CL+$01
+	sta A8LIBSTR.STRAI.PS+1
+	lda BL
+	sta A8LIBSTR.STRAI.BS
+	jsr A8LIBSTR.STRAI
+
+; optimize OK (A8LIBWIN), line = 399
+
+	ldy BN
+	lda adr.BAW.BI,y
+	cmp #$01
+	jeq l_0E08x
+	lda BI
+	cmp #$01
+	jne l_0E08
+l_0E08x
+
+; optimize OK (A8LIBWIN), line = 401
+
+	lda <adr.CL+$01
+	sta A8LIBSTR.STRINV.PS
+	lda >adr.CL+$01
+	sta A8LIBSTR.STRINV.PS+1
+	lda BL
+	sta A8LIBSTR.STRINV.BS
+	jsr A8LIBSTR.STRINV
+l_0E08
+
+; optimize OK (A8LIBWIN), line = 405
+
+	lda $0058
+	sta :STACKORIGIN+9
+	lda $0058+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	ldy BN
+	lda adr.BAW.BY,y
+	jsr @mul40
+	add :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc :eax+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	ldy BN
+	lda :STACKORIGIN+9
+	add adr.BAW.BX,y
+	sta CS
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc #$00
+	sta CS+1
+
+; optimize OK (A8LIBWIN), line = 408
+
+	lda Y
+	jsr @mul40
+	add CS
+	sta CS
+	lda CS+1
+	adc :eax+1
+	sta CS+1
+
+; optimize OK (A8LIBWIN), line = 411
+
+	lda X
+	cmp #$FF
+	jeq l_0E44
+
+; optimize OK (A8LIBWIN), line = 414
+
+	lda CS
+	add X
+	sta CS
+	scc
+	inc CS+1
+	jmp l_0E51
+l_0E44
+
+; optimize OK (A8LIBWIN), line = 418
+
+	ldy BN
+	lda adr.BAW.BW,y
+	sub BL
+	sta :eax
+	lda #$00
+	sbc #$00
+	sta :eax+1
+	lda #$00
+	sbc #$00
+	sta :eax+2
+	lda #$00
+	sbc #$00
+	sta :eax+3
+	lda #$02
+	sta :ecx
+	lda #$00
+	sta :ecx+1
+	jsr idivEAX_CX
+	lda CS
+	add :eax
+	sta CS
+	lda CS+1
+	adc :eax+1
+	sta CS+1
+l_0E51
+
+; optimize OK (A8LIBWIN), line = 422
+
+	lda <adr.CL+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.CL+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda CS
+	sta SYSTEM.MOVE_052C.DEST
+	lda CS+1
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda BL
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 425
+
+	lda #$00
+	sta RESULT
+l_0D89
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0900
+X	= DATAORIGIN+$0901
+Y	= DATAORIGIN+$0902
+BI	= DATAORIGIN+$0903
+adr.PS	= [DATAORIGIN+$0904] .array [256]
+.var PS	= adr.PS .word
+RESULT	= DATAORIGIN+$0A04
+BL	= DATAORIGIN+$0A05
+TMP	= DATAORIGIN+$0A06
+CS	= DATAORIGIN+$0A07
+adr.CL	= [DATAORIGIN+$0A09] .array [130]
+.var CL	= adr.CL .word
+
+@VarData	= BN
+@VarDataSize	= 394
+
+	rts						; ret
+.endl
+
+.local	WORN						; FUNCTION
+
+; ------------------------------------------------------------
+
+; Generate Assignment for BYTE / CHAR / SHORTINT / BOOLEAN
+; as Pointer
+	lda :STACKORIGIN,x
+	sta BN
+	dex
+	jmi @main
+
+; ------------------------------------------------------------
+
+; Generate Assignment for BYTE / CHAR / SHORTINT / BOOLEAN
+; as Pointer
+	lda :STACKORIGIN,x
+	sta BT
+	dex
+	jmi @main
+
+; ------------------------------------------------------------
+
+; Generate Assignment for BYTE / CHAR / SHORTINT / BOOLEAN
+; as Pointer
+	lda :STACKORIGIN,x
+	sta BL
+	dex
+	jmi @main
+
+; ------------------------------------------------------------
+
+; Generate Assignment for WORD / SMALLINT / SHORTREAL / POINTER
+; as Pointer
+	lda :STACKORIGIN,x
+	sta :bp2
+	lda :STACKORIGIN+STACKWIDTH,x
+	sta :bp2+1
+	ldy #$00
+	mva:rne (:bp2),y adr.PS,y+
+	mwa #adr.PS PS
+	dex
+@main
+
+; optimize OK (A8LIBWIN), line = 447
+
+	lda #$65
+	sta RESULT
+
+; optimize OK (A8LIBWIN), line = 450
+
+	ldy BN
+	lda adr.BAW.BU,y
+	cmp #$01
+	jne l_0E99
+
+; optimize OK (A8LIBWIN), line = 453
+
+	lda adr.PS
+	add #$02
+	sta BS
+
+; optimize OK (A8LIBWIN), line = 454
+
+	lda CL
+	sta SYSTEM.SETLENGTH.S
+	lda CL+1
+	sta SYSTEM.SETLENGTH.S+1
+	lda BS
+	sta SYSTEM.SETLENGTH.LEN
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBWIN), line = 455
+
+	lda #$04
+	sta adr.CL+$01
+
+; optimize OK (A8LIBWIN), line = 456
+
+	lda adr.PS
+	sta SYSTEM.MOVE_052C.COUNT
+	lda <adr.CL+$02
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CL+$02
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda <adr.PS+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.PS+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 457
+
+	ldy BS
+	lda #$01
+	sta adr.CL,y
+
+; optimize OK (A8LIBWIN), line = 460
+
+	lda <adr.CL+$01
+	sta A8LIBSTR.STRAI.PS
+	lda >adr.CL+$01
+	sta A8LIBSTR.STRAI.PS+1
+	lda BS
+	sta A8LIBSTR.STRAI.BS
+	jsr A8LIBSTR.STRAI
+
+; optimize OK (A8LIBWIN), line = 463
+
+	ldy BN
+	lda adr.BAW.BI,y
+	cmp #$01
+	jne l_0ED0
+
+; optimize OK (A8LIBWIN), line = 465
+
+	lda <adr.CL+$01
+	sta A8LIBSTR.STRINV.PS
+	lda >adr.CL+$01
+	sta A8LIBSTR.STRINV.PS+1
+	lda BS
+	sta A8LIBSTR.STRINV.BS
+	jsr A8LIBSTR.STRINV
+	jmp l_0EDF
+l_0ED0
+
+; optimize OK (A8LIBWIN), line = 470
+
+	lda BS
+	sub #$02
+	sta A8LIBSTR.STRINV.BS
+	lda <adr.CL+$02
+	sta A8LIBSTR.STRINV.PS
+	lda >adr.CL+$02
+	sta A8LIBSTR.STRINV.PS+1
+	jsr A8LIBSTR.STRINV
+l_0EDF
+
+; optimize OK (A8LIBWIN), line = 474
+
+	lda $0058
+	sta :STACKORIGIN+9
+	lda $0058+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	ldy BN
+	lda adr.BAW.BY,y
+	jsr @mul40
+	add :STACKORIGIN+9
+	sta CS
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc :eax+1
+	sta CS+1
+
+; optimize OK (A8LIBWIN), line = 477
+
+	lda BT
+	cmp #$F2
+	jne l_0F0C
+
+; optimize OK (A8LIBWIN), line = 479
+
+	ldy BN
+	lda adr.BAW.BH,y
+	sub #$01
+	jsr @mul40
+	add CS
+	sta CS
+	lda CS+1
+	adc :eax+1
+	sta CS+1
+l_0F0C
+
+; optimize OK (A8LIBWIN), line = 483
+
+	lda BL
+	cmp #$FB
+	jne l_0F2F
+
+; optimize OK (A8LIBWIN), line = 485
+
+	ldy BN
+	lda adr.BAW.BX,y
+	add #$01
+	sta :STACKORIGIN+9
+	lda #$00
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda CS
+	add :STACKORIGIN+9
+	sta CS
+	lda CS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta CS+1
+	jmp l_0F43
+l_0F2F
+
+; optimize OK (A8LIBWIN), line = 488
+
+	lda BL
+	cmp #$FC
+	jne l_0F55
+
+; optimize OK (A8LIBWIN), line = 490
+
+	ldy BN
+	lda adr.BAW.BX,y
+	add adr.BAW.BW,y
+	sta :STACKORIGIN+9
+	lda #$00
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda #$00
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH*2+9
+	lda #$00
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH*3+9
+	lda :STACKORIGIN+9
+	sub BS
+	sta :STACKORIGIN+9
+	lda :STACKORIGIN+STACKWIDTH+9
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda :STACKORIGIN+STACKWIDTH*2+9
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH*2+9
+	lda :STACKORIGIN+STACKWIDTH*3+9
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH*3+9
+	lda :STACKORIGIN+9
+	sub #$01
+	sta :STACKORIGIN+9
+	lda :STACKORIGIN+STACKWIDTH+9
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda :STACKORIGIN+STACKWIDTH*2+9
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH*2+9
+	lda :STACKORIGIN+STACKWIDTH*3+9
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH*3+9
+	lda CS
+	add :STACKORIGIN+9
+	sta CS
+	lda CS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta CS+1
+	jmp l_0F78
+l_0F55
+
+; optimize OK (A8LIBWIN), line = 494
+
+	ldy BN
+	lda adr.BAW.BX,y
+	sta :STACKORIGIN+9
+	lda adr.BAW.BW,y
+	sub BS
+	sta :eax
+	lda #$00
+	sbc #$00
+	sta :eax+1
+	lda #$00
+	sbc #$00
+	sta :eax+2
+	lda #$00
+	sbc #$00
+	sta :eax+3
+	lda #$02
+	sta :ecx
+	lda #$00
+	sta :ecx+1
+	jsr idivEAX_CX
+	lda :STACKORIGIN+9
+	add :eax
+	sta :STACKORIGIN+9
+	lda #$00
+	adc :eax+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda CS
+	add :STACKORIGIN+9
+	sta CS
+	lda CS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta CS+1
+l_0F78
+l_0F43
+
+; optimize OK (A8LIBWIN), line = 498
+
+	lda <adr.CL+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.CL+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda CS
+	sta SYSTEM.MOVE_052C.DEST
+	lda CS+1
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda BS
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 501
+
+	lda #$00
+	sta RESULT
+l_0E99
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0A8B
+BT	= DATAORIGIN+$0A8C
+BL	= DATAORIGIN+$0A8D
+adr.PS	= [DATAORIGIN+$0A8E] .array [256]
+.var PS	= adr.PS .word
+RESULT	= DATAORIGIN+$0B8E
+BS	= DATAORIGIN+$0B8F
+CS	= DATAORIGIN+$0B90
+adr.CL	= [DATAORIGIN+$0B92] .array [37]
+.var CL	= adr.CL .word
+
+@VarData	= BN
+@VarDataSize	= 299
+
+	rts						; ret
+.endl
+
+.local	WDIV						; FUNCTION
+
+; optimize OK (A8LIBWIN), line = 523
+
+	ldy BN
+	lda adr.BAW.BU,y
+	cmp #$01
+	jne l_0FB9
+
+; optimize OK (A8LIBWIN), line = 526
+
+	lda adr.BAW.BW,y
+	sta BS
+
+; optimize OK (A8LIBWIN), line = 531
+
+	lda BD
+	cmp #$01
+	jne l_0FD5
+
+; optimize OK (A8LIBWIN), line = 534
+
+	lda CL
+	sta SYSTEM.FILLCHAR_052B.A
+	lda CL+1
+	sta SYSTEM.FILLCHAR_052B.A+1
+	lda BS
+	sta SYSTEM.FILLCHAR_052B.COUNT
+	lda #$00
+	sta SYSTEM.FILLCHAR_052B.COUNT+1
+	lda #$52
+	sta SYSTEM.FILLCHAR_052B.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_052B
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 535
+
+	lda #$41
+	sta adr.CL+$01
+
+; optimize OK (A8LIBWIN), line = 536
+
+	ldy BS
+	lda #$44
+	sta adr.CL,y
+	jmp l_0FF2
+l_0FD5
+
+; optimize OK (A8LIBWIN), line = 540
+
+	lda CL
+	sta SYSTEM.FILLCHAR_052B.A
+	lda CL+1
+	sta SYSTEM.FILLCHAR_052B.A+1
+	lda BS
+	sta SYSTEM.FILLCHAR_052B.COUNT
+	lda #$00
+	sta SYSTEM.FILLCHAR_052B.COUNT+1
+	sta SYSTEM.FILLCHAR_052B.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_052B
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 541
+
+	lda #$7C
+	sta adr.CL+$01
+
+; optimize OK (A8LIBWIN), line = 542
+
+	ldy BS
+	sta adr.CL,y
+l_0FF2
+
+; optimize OK (A8LIBWIN), line = 546
+
+	ldy BN
+	lda adr.BAW.BI,y
+	cmp #$01
+	jne l_101A
+
+; optimize OK (A8LIBWIN), line = 548
+
+	lda #$01
+	sta BL
+
+l_1026
+; --- ForToDoCondition
+	lda BL
+	cmp BS
+	scc
+	jne l_1034
+
+; optimize OK (A8LIBWIN), line = 550
+
+	ldy BL
+	lda adr.CL,y
+	eor #$80
+	sta adr.CL,y
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_1026
+l_1034
+l_101A
+
+; optimize OK (A8LIBWIN), line = 555
+
+	lda $0058
+	sta :STACKORIGIN+9
+	lda $0058+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	ldy BN
+	lda adr.BAW.BY,y
+	add Y
+	sta :eax
+	lda #$00
+	adc #$00
+	sta :eax+1
+	lda #$28
+	sta :ecx
+	lda #$00
+	sta :ecx+1
+	.ifdef fmulinit
+	fmulu_16
+	els
+	imulCX
+	eif
+	lda :STACKORIGIN+9
+	add :eax
+	sta :STACKORIGIN+9
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc :eax+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	ldy BN
+	lda :STACKORIGIN+9
+	add adr.BAW.BX,y
+	sta CS
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc #$00
+	sta CS+1
+
+; optimize OK (A8LIBWIN), line = 558
+
+	lda <adr.CL+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.CL+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda CS
+	sta SYSTEM.MOVE_052C.DEST
+	lda CS+1
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda BS
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 562
+
+	lda #$00
+	sta BR
+l_0FB9
+
+; optimize OK (A8LIBWIN), line = 565
+
+	lda BR
+	sta RESULT
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0BB7
+Y	= DATAORIGIN+$0BB8
+BD	= DATAORIGIN+$0BB9
+RESULT	= DATAORIGIN+$0BBA
+BR	= DATAORIGIN+$0BBB
+BS	= DATAORIGIN+$0BBC
+BL	= DATAORIGIN+$0BBD
+CS	= DATAORIGIN+$0BBE
+adr.CL	= [DATAORIGIN+$0BC0] .array [42]
+.var CL	= adr.CL .word
+
+@VarData	= BN
+@VarDataSize	= 50
+
+	rts						; ret
+.endl
+
+.local	WCLR						; FUNCTION
+	sta BN
+
+; optimize OK (A8LIBWIN), line = 585
+
+	ldy BN
+	lda adr.BAW.BU,y
+	cmp #$01
+	jne l_1098
+
+; optimize OK (A8LIBWIN), line = 588
+
+	lda $0058
+	sta :STACKORIGIN+9
+	lda $0058+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda adr.BAW.BY,y
+	jsr @mul40
+	add :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc :eax+1
+	sta :STACKORIGIN+STACKWIDTH+9
+	ldy BN
+	lda :STACKORIGIN+9
+	add adr.BAW.BX,y
+	sta :STACKORIGIN+9
+	lda :STACKORIGIN+STACKWIDTH+9
+	adc #$00
+	sta CS+1
+	lda :STACKORIGIN+9
+	add #$29
+	sta CS
+	scc
+	inc CS+1
+
+; optimize OK (A8LIBWIN), line = 591
+
+	ldy BN
+	lda adr.BAW.BW,y
+	sub #$02
+	sta BS
+
+; optimize OK (A8LIBWIN), line = 594
+
+	lda CL
+	sta SYSTEM.FILLCHAR_052B.A
+	lda CL+1
+	sta SYSTEM.FILLCHAR_052B.A+1
+	lda BS
+	sta SYSTEM.FILLCHAR_052B.COUNT
+	lda #$00
+	sta SYSTEM.FILLCHAR_052B.COUNT+1
+	sta SYSTEM.FILLCHAR_052B.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_052B
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 598
+
+	ldy BN
+	lda adr.BAW.BI,y
+	cmp #$01
+	jne l_10E1
+
+; optimize OK (A8LIBWIN), line = 600
+
+	lda CL
+	sta A8LIBSTR.STRINV.PS
+	lda CL+1
+	sta A8LIBSTR.STRINV.PS+1
+	lda BS
+	sta A8LIBSTR.STRINV.BS
+	jsr A8LIBSTR.STRINV
+l_10E1
+
+; optimize OK (A8LIBWIN), line = 604
+
+	lda #$01
+	sta BL
+	ldy BN
+	lda adr.BAW.BH,y
+	sub #$02
+	sta @FORTMP_10F9_0
+
+l_10FC
+; --- ForToDoCondition
+	lda @FORTMP_10F9_0:#$00
+	cmp BL
+	jcc l_110A
+
+; optimize OK (A8LIBWIN), line = 606
+
+	lda <adr.CL+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.CL+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda CS
+	sta SYSTEM.MOVE_052C.DEST
+	lda CS+1
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda BS
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBWIN), line = 607
+
+	lda CS
+	add #$28
+	sta CS
+	scc
+	inc CS+1
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_10FC
+l_110A
+
+; optimize OK (A8LIBWIN), line = 611
+
+	lda #$00
+	sta BR
+l_1098
+
+; optimize OK (A8LIBWIN), line = 614
+
+	lda BR
+	sta RESULT
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0BEA
+RESULT	= DATAORIGIN+$0BEB
+BR	= DATAORIGIN+$0BEC
+BS	= DATAORIGIN+$0BED
+BL	= DATAORIGIN+$0BEE
+CS	= DATAORIGIN+$0BEF
+adr.CL	= [DATAORIGIN+$0BF1] .array [39]
+.var CL	= adr.CL .word
+
+@VarData	= BN
+@VarDataSize	= 45
+
+	rts						; ret
+.endl
+
+; ------------------------------------------------------------
+
+adr.BAW	= DATAORIGIN+$002E	; [110] RECORD
+.var BAW	= adr.BAW .word
+adr.BAW.BU	= [DATAORIGIN+$002E] .array [11]
+.var BAW.BU	= adr.BAW.BU .word
+adr.BAW.BX	= [DATAORIGIN+$0039] .array [11]
+.var BAW.BX	= adr.BAW.BX .word
+adr.BAW.BY	= [DATAORIGIN+$0044] .array [11]
+.var BAW.BY	= adr.BAW.BY .word
+adr.BAW.BW	= [DATAORIGIN+$004F] .array [11]
+.var BAW.BW	= adr.BAW.BW .word
+adr.BAW.BH	= [DATAORIGIN+$005A] .array [11]
+.var BAW.BH	= adr.BAW.BH .word
+adr.BAW.BI	= [DATAORIGIN+$0065] .array [11]
+.var BAW.BI	= adr.BAW.BI .word
+adr.BAW.CM	= [DATAORIGIN+$0070] .array [11] .word
+.var BAW.CM	= adr.BAW.CM .word
+adr.BAW.CZ	= [DATAORIGIN+$0086] .array [11] .word
+.var BAW.CZ	= adr.BAW.CZ .word
+adr.VCUR	= DATAORIGIN+$009C	; [2] RECORD
+.var VCUR	= adr.VCUR .word
+VCUR.VX	= DATAORIGIN+$009C
+VCUR.VY	= DATAORIGIN+$009D
+adr.BAWM	= [DATAORIGIN+$009E] .array [2068]
+.var BAWM	= adr.BAWM .word
+CPWM	= DATAORIGIN+$08B2
+
+.endl							; UNIT A8LIBWIN
+
+; ------------------------------------------------------------
+
+.local	A8LIBMENU					; UNIT
+
+.local	MENUV						; FUNCTION
+
+; optimize OK (A8LIBMENU), line = 57
+
+	lda #$00
+	sta BF
+
+; optimize OK (A8LIBMENU), line = 60
+
+	lda BS
+	sta RESULT
+
+; --- WhileProlog
+	jmp l_1133
+l_1134
+
+; optimize OK (A8LIBMENU), line = 66
+
+	lda #$00
+	sta BL
+	ldy BC
+	dey
+	sty @FORTMP_1140_0
+
+l_1143
+; --- ForToDoCondition
+	lda @FORTMP_1140_0:#$00
+	cmp BL
+	jcc l_1151
+
+; optimize OK (A8LIBMENU), line = 68
+
+	lda #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda BL
+	asl @
+	rol :STACKORIGIN+STACKWIDTH+9
+	add PS
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta :bp2+1
+	ldy #$00
+	lda (:bp2),y
+	sta @move.src
+	iny
+	lda (:bp2),y
+	sta @move.src+1
+	@moveSTRING TMPSTR #40
+
+; optimize OK (A8LIBMENU), line = 69
+
+	lda adr.TMPSTR
+	sta SYSTEM.SETLENGTH.LEN
+	lda CL
+	sta SYSTEM.SETLENGTH.S
+	lda CL+1
+	sta SYSTEM.SETLENGTH.S+1
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBMENU), line = 70
+
+	lda adr.CL
+	sta SYSTEM.MOVE_052C.COUNT
+	lda <adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda <adr.TMPSTR+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.TMPSTR+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBMENU), line = 73
+
+	lda BL
+	add #$01
+	cmp RESULT
+	jne l_1174
+
+; optimize OK (A8LIBMENU), line = 75
+
+	lda #$01
+	sta TMP
+	jmp l_1182
+l_1174
+
+; optimize OK (A8LIBMENU), line = 78
+
+	lda #$00
+	sta TMP
+l_1182
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBMENU), line = 80
+
+	inx
+	mva CL :STACKORIGIN,x
+	mva CL+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva TMP :STACKORIGIN,x
+	inx
+	lda Y
+	add BL
+	sta :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_1143
+l_1151
+
+; optimize OK (A8LIBMENU), line = 84
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta BK
+
+; optimize OK (A8LIBMENU), line = 87
+
+	cmp #$8F
+	jeq l_11DBx
+	cmp #$0F
+	jeq l_11DBx
+	cmp #$87
+	jeq l_11DBx
+	cmp #$07
+	jne l_11DB
+l_11DBx
+
+; optimize FAIL (0, A8LIBMENU), line = 90
+
+	inc RESULT
+
+; optimize OK (A8LIBMENU), line = 93
+
+	lda BC
+	cmp RESULT
+	jcs l_11F4
+
+; optimize OK (A8LIBMENU), line = 95
+
+	lda #$01
+	sta RESULT
+l_11F4
+	jmp l_1204
+l_11DB
+
+; optimize OK (A8LIBMENU), line = 98
+
+	lda BK
+	cmp #$8E
+	jeq l_123Ax
+	cmp #$0E
+	jeq l_123Ax
+	cmp #$86
+	jeq l_123Ax
+	cmp #$06
+	jne l_123A
+l_123Ax
+
+; optimize FAIL (0, A8LIBMENU), line = 101
+
+	dec RESULT
+
+; optimize OK (A8LIBMENU), line = 104
+
+	lda RESULT
+	cmp #$01
+	jcs l_1251
+
+; optimize OK (A8LIBMENU), line = 106
+
+	lda BC
+	sta RESULT
+l_1251
+l_123A
+l_1204
+
+; optimize OK (A8LIBMENU), line = 111
+
+	lda RESULT
+	sta BL
+
+; optimize OK (A8LIBMENU), line = 114
+
+	lda BK
+	cmp #$1C
+	jne l_1274
+
+; optimize OK (A8LIBMENU), line = 116
+
+	lda #$FD
+	sta RESULT
+
+; optimize OK (A8LIBMENU), line = 117
+
+	lda #$01
+	sta BF
+	jmp l_1286
+l_1274
+
+; optimize OK (A8LIBMENU), line = 120
+
+	lda BK
+	cmp #$2C
+	jne l_1298
+
+; optimize OK (A8LIBMENU), line = 122
+
+	lda #$FE
+	sta RESULT
+
+; optimize OK (A8LIBMENU), line = 123
+
+	lda #$01
+	sta BF
+	jmp l_12AA
+l_1298
+
+; optimize OK (A8LIBMENU), line = 126
+
+	lda BK
+	cmp #$0C
+	jne l_12BC
+
+; optimize OK (A8LIBMENU), line = 128
+
+	lda #$01
+	sta BF
+l_12BC
+l_12AA
+l_1286
+l_1133
+
+; optimize OK (A8LIBMENU), line = 63
+
+	lda BF
+	jeq l_1134
+
+; optimize OK (A8LIBMENU), line = 133
+
+	lda BI
+	jne l_12DE
+
+; optimize OK (A8LIBMENU), line = 135
+
+	lda BL
+	sub #$01
+	sta :STACKORIGIN+9
+	lda #$00
+	sbc #$00
+	asl :STACKORIGIN+9
+	rol @
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda PS
+	add :STACKORIGIN+9
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta :bp2+1
+	ldy #$00
+	lda (:bp2),y
+	sta @move.src
+	iny
+	lda (:bp2),y
+	sta @move.src+1
+	@moveSTRING TMPSTR #40
+
+; optimize OK (A8LIBMENU), line = 136
+
+	lda adr.TMPSTR
+	sta SYSTEM.SETLENGTH.LEN
+	lda CL
+	sta SYSTEM.SETLENGTH.S
+	lda CL+1
+	sta SYSTEM.SETLENGTH.S+1
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBMENU), line = 137
+
+	lda adr.CL
+	sta SYSTEM.MOVE_052C.COUNT
+	lda <adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda <adr.TMPSTR+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.TMPSTR+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBMENU), line = 138
+
+	inx
+	mva CL :STACKORIGIN,x
+	mva CL+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	lda Y
+	add BL
+	sta :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	jsr subAL_CL
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+l_12DE
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0C19
+X	= DATAORIGIN+$0C1A
+Y	= DATAORIGIN+$0C1B
+BI	= DATAORIGIN+$0C1C
+BS	= DATAORIGIN+$0C1D
+BC	= DATAORIGIN+$0C1E
+adr.PS	= [DATAORIGIN+$0C1F] .array [1] .word
+.var PS	= adr.PS .word
+RESULT	= DATAORIGIN+$0C21
+BF	= DATAORIGIN+$0C22
+BL	= DATAORIGIN+$0C23
+BK	= DATAORIGIN+$0C24
+TMP	= DATAORIGIN+$0C25
+adr.CL	= [DATAORIGIN+$0C26] .array [40]
+.var CL	= adr.CL .word
+adr.TMPSTR	= [DATAORIGIN+$0C4E] .array [40]
+.var TMPSTR	= adr.TMPSTR .word
+
+@VarData	= BN
+@VarDataSize	= 92
+
+	rts						; ret
+.endl
+
+.local	MENUH						; FUNCTION
+
+; optimize OK (A8LIBMENU), line = 161
+
+	lda #$00
+	sta BF
+
+; optimize OK (A8LIBMENU), line = 163
+
+	lda BS
+	sta RESULT
+
+; --- WhileProlog
+	jmp l_1317
+l_1318
+
+; optimize OK (A8LIBMENU), line = 168
+
+	lda X
+	sta POS
+
+; optimize OK (A8LIBMENU), line = 170
+
+	lda #$00
+	sta BL
+	ldy BC
+	dey
+	sty @FORTMP_132A_0
+
+l_132D
+; --- ForToDoCondition
+	lda @FORTMP_132A_0:#$00
+	cmp BL
+	jcc l_133B
+
+; optimize OK (A8LIBMENU), line = 172
+
+	lda #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda BL
+	asl @
+	rol :STACKORIGIN+STACKWIDTH+9
+	add PS
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta :bp2+1
+	ldy #$00
+	lda (:bp2),y
+	sta @move.src
+	iny
+	lda (:bp2),y
+	sta @move.src+1
+	@moveSTRING TMPSTR #40
+
+; optimize OK (A8LIBMENU), line = 173
+
+	lda adr.TMPSTR
+	sta SYSTEM.SETLENGTH.LEN
+	lda CL
+	sta SYSTEM.SETLENGTH.S
+	lda CL+1
+	sta SYSTEM.SETLENGTH.S+1
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBMENU), line = 174
+
+	lda adr.CL
+	sta L
+
+; optimize OK (A8LIBMENU), line = 175
+
+	lda <adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda <adr.TMPSTR+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.TMPSTR+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda L
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBMENU), line = 178
+
+	lda BL
+	add #$01
+	cmp RESULT
+	jne l_1364
+
+; optimize OK (A8LIBMENU), line = 180
+
+	lda #$01
+	sta TMP
+	jmp l_1372
+l_1364
+
+; optimize OK (A8LIBMENU), line = 183
+
+	lda #$00
+	sta TMP
+l_1372
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBMENU), line = 185
+
+	inx
+	mva CL :STACKORIGIN,x
+	mva CL+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva TMP :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	lda POS
+	add BL
+	sta :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBMENU), line = 186
+
+	lda POS
+	add L
+	sta POS
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_132D
+l_133B
+
+; optimize OK (A8LIBMENU), line = 190
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta BK
+
+; optimize OK (A8LIBMENU), line = 193
+
+	cmp #$8F
+	jeq l_13D7x
+	cmp #$0F
+	jeq l_13D7x
+	cmp #$87
+	jeq l_13D7x
+	cmp #$07
+	jne l_13D7
+l_13D7x
+
+; optimize FAIL (0, A8LIBMENU), line = 196
+
+	inc RESULT
+
+; optimize OK (A8LIBMENU), line = 199
+
+	lda BC
+	cmp RESULT
+	jcs l_13F0
+
+; optimize OK (A8LIBMENU), line = 201
+
+	lda #$01
+	sta RESULT
+l_13F0
+	jmp l_1400
+l_13D7
+
+; optimize OK (A8LIBMENU), line = 204
+
+	lda BK
+	cmp #$8E
+	jeq l_1436x
+	cmp #$0E
+	jeq l_1436x
+	cmp #$86
+	jeq l_1436x
+	cmp #$06
+	jne l_1436
+l_1436x
+
+; optimize FAIL (0, A8LIBMENU), line = 207
+
+	dec RESULT
+
+; optimize OK (A8LIBMENU), line = 210
+
+	lda RESULT
+	cmp #$01
+	jcs l_144D
+
+; optimize OK (A8LIBMENU), line = 212
+
+	lda BC
+	sta RESULT
+l_144D
+l_1436
+l_1400
+
+; optimize OK (A8LIBMENU), line = 217
+
+	lda RESULT
+	sta BL
+
+; optimize OK (A8LIBMENU), line = 220
+
+	lda BK
+	cmp #$1C
+	jne l_1470
+
+; optimize OK (A8LIBMENU), line = 222
+
+	lda #$FD
+	sta RESULT
+
+; optimize OK (A8LIBMENU), line = 223
+
+	lda #$01
+	sta BF
+	jmp l_1482
+l_1470
+
+; optimize OK (A8LIBMENU), line = 226
+
+	lda BK
+	cmp #$2C
+	jne l_1494
+
+; optimize OK (A8LIBMENU), line = 228
+
+	lda #$FE
+	sta RESULT
+
+; optimize OK (A8LIBMENU), line = 229
+
+	lda #$01
+	sta BF
+	jmp l_14A6
+l_1494
+
+; optimize OK (A8LIBMENU), line = 232
+
+	lda BK
+	cmp #$0C
+	jne l_14B8
+
+; optimize OK (A8LIBMENU), line = 234
+
+	lda #$01
+	sta BF
+l_14B8
+l_14A6
+l_1482
+l_1317
+
+; optimize OK (A8LIBMENU), line = 166
+
+	lda BF
+	jeq l_1318
+
+; optimize OK (A8LIBMENU), line = 239
+
+	lda BI
+	jne l_14DA
+
+; optimize OK (A8LIBMENU), line = 241
+
+	lda BL
+	sub #$01
+	sta :STACKORIGIN+9
+	lda #$00
+	sbc #$00
+	asl :STACKORIGIN+9
+	rol @
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda PS
+	add :STACKORIGIN+9
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta :bp2+1
+	ldy #$00
+	lda (:bp2),y
+	sta @move.src
+	iny
+	lda (:bp2),y
+	sta @move.src+1
+	@moveSTRING TMPSTR #40
+
+; optimize OK (A8LIBMENU), line = 242
+
+	lda adr.TMPSTR
+	sta SYSTEM.SETLENGTH.LEN
+	lda CL
+	sta SYSTEM.SETLENGTH.S
+	lda CL+1
+	sta SYSTEM.SETLENGTH.S+1
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBMENU), line = 243
+
+	lda adr.CL
+	sta SYSTEM.MOVE_052C.COUNT
+	lda <adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CL+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda <adr.TMPSTR+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.TMPSTR+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBMENU), line = 244
+
+	inx
+	mva CL :STACKORIGIN,x
+	mva CL+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	lda POS
+	add BL
+	sta :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	jsr subAL_CL
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+l_14DA
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0C77
+X	= DATAORIGIN+$0C78
+Y	= DATAORIGIN+$0C79
+BI	= DATAORIGIN+$0C7A
+BS	= DATAORIGIN+$0C7B
+BC	= DATAORIGIN+$0C7C
+adr.PS	= [DATAORIGIN+$0C7D] .array [1] .word
+.var PS	= adr.PS .word
+RESULT	= DATAORIGIN+$0C7F
+BF	= DATAORIGIN+$0C80
+BL	= DATAORIGIN+$0C81
+BK	= DATAORIGIN+$0C82
+TMP	= DATAORIGIN+$0C83
+L	= DATAORIGIN+$0C84
+POS	= DATAORIGIN+$0C85
+adr.CL	= [DATAORIGIN+$0C86] .array [40]
+.var CL	= adr.CL .word
+adr.TMPSTR	= [DATAORIGIN+$0CAE] .array [40]
+.var TMPSTR	= adr.TMPSTR .word
+
+@VarData	= BN
+@VarDataSize	= 94
+
+	rts						; ret
+.endl
+
+; ------------------------------------------------------------
+
+.endl							; UNIT A8LIBMENU
+
+; ------------------------------------------------------------
+
+.local	A8LIBGADG					; UNIT
+
+.local	GALERT						; PROCEDURE
+
+; ------------------------------------------------------------
+
+; Generate Assignment for WORD / SMALLINT / SHORTREAL / POINTER
+; as Pointer
+	lda :STACKORIGIN,x
+	sta :bp2
+	lda :STACKORIGIN+STACKWIDTH,x
+	sta :bp2+1
+	ldy #$26
+	mva:rpl (:bp2),y adr.PS,y-
+	mwa #adr.PS PS
+	dex
+@main
+
+; optimize OK (A8LIBGADG), line = 60
+
+	lda adr.PS
+	sta BL
+
+; optimize OK (A8LIBGADG), line = 61
+
+	lda #$26
+	sub BL
+	sta :eax
+	lda #$00
+	sbc #$00
+	sta :eax+1
+	lda #$00
+	sbc #$00
+	sta :eax+2
+	lda #$00
+	sbc #$00
+	sta :eax+3
+	lda #$02
+	sta :ecx
+	lda #$00
+	sta :ecx+1
+	jsr idivEAX_CX
+	lda :eax
+	sta X
+
+; optimize OK (A8LIBGADG), line = 64
+
+	lda BL
+	add #$02
+	sta A8LIBWIN.WOPEN.W
+	lda X
+	sta A8LIBWIN.WOPEN.X
+	lda #$0A
+	sta A8LIBWIN.WOPEN.Y
+	lda #$06
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW
+
+; optimize FAIL ('A8LIBWIN.WORN', A8LIBGADG), line = 65
+
+	inx
+	mva #$19 :STACKORIGIN,x
+	mva #$20 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva #$F1 :STACKORIGIN,x
+	inx
+	mva BW :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 66
+
+	inx
+	mva PS :STACKORIGIN,x
+	mva PS+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 67
+
+	inx
+	mva #$21 :STACKORIGIN,x
+	mva #$20 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva #$04 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 70
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta X
+
+; optimize OK (A8LIBGADG), line = 73
+
+	lda BW
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+
+; ------------------------------------------------------------
+
+adr.PS	= [DATAORIGIN+$0CD7] .array [39]
+.var PS	= adr.PS .word
+BW	= DATAORIGIN+$0CFE
+BL	= DATAORIGIN+$0CFF
+X	= DATAORIGIN+$0D00
+
+@VarData	= PS
+@VarDataSize	= 42
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	GCONFIRM					; FUNCTION
+
+; ------------------------------------------------------------
+
+; Generate Assignment for WORD / SMALLINT / SHORTREAL / POINTER
+; as Pointer
+	lda :STACKORIGIN,x
+	sta :bp2
+	lda :STACKORIGIN+STACKWIDTH,x
+	sta :bp2+1
+	ldy #$26
+	mva:rpl (:bp2),y adr.PS,y-
+	mwa #adr.PS PS
+	dex
+@main
+
+; optimize OK (A8LIBGADG), line = 90
+
+	lda adr.PS
+	sta BL
+
+; optimize OK (A8LIBGADG), line = 91
+
+	cmp #$12
+	jcs l_156F
+	lda #$12
+	sta BL
+l_156F
+
+; optimize OK (A8LIBGADG), line = 92
+
+	lda #$26
+	sub BL
+	sta :eax
+	lda #$00
+	sbc #$00
+	sta :eax+1
+	lda #$00
+	sbc #$00
+	sta :eax+2
+	lda #$00
+	sbc #$00
+	sta :eax+3
+	lda #$02
+	sta :ecx
+	lda #$00
+	sta :ecx+1
+	jsr idivEAX_CX
+	lda :eax
+	sta X1
+
+; optimize OK (A8LIBGADG), line = 93
+
+	lda BL
+	add #$F0
+	sta :eax
+	lda #$00
+	adc #$FF
+	sta :eax+1
+	lda #$00
+	adc #$FF
+	sta :eax+2
+	lda #$00
+	adc #$FF
+	sta :eax+3
+	lda #$02
+	sta :ecx
+	lda #$00
+	sta :ecx+1
+	jsr idivEAX_CX
+	lda :eax
+	add #$01
+	sta X2
+
+; optimize OK (A8LIBGADG), line = 96
+
+	lda BL
+	add #$02
+	sta A8LIBWIN.WOPEN.W
+	lda X1
+	sta A8LIBWIN.WOPEN.X
+	lda #$0A
+	sta A8LIBWIN.WOPEN.Y
+	lda #$06
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW
+
+; optimize FAIL ('A8LIBWIN.WORN', A8LIBGADG), line = 97
+
+	inx
+	mva #$35 :STACKORIGIN,x
+	mva #$20 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva #$F1 :STACKORIGIN,x
+	inx
+	mva BW :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 98
+
+	inx
+	mva PS :STACKORIGIN,x
+	mva PS+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 99
+
+	lda BW
+	sta GBUTTON.BN
+	lda X2
+	sta GBUTTON.X
+	lda #$04
+	sta GBUTTON.Y
+	lda #$01
+	sta GBUTTON.BO
+	lda #$00
+	sta GBUTTON.BD
+	lda #$02
+	sta GBUTTON.BS
+	lda #$92
+	sta GBUTTON.PA
+	lda #$25
+	sta GBUTTON.PA+1
+	jsr GBUTTON
+	mva GBUTTON.RESULT :STACKORIGIN+1,x
+
+; --- RepeatUntilProlog
+l_15D0
+
+; optimize OK (A8LIBGADG), line = 104
+
+	lda BW
+	sta GBUTTON.BN
+	lda X2
+	sta GBUTTON.X
+	lda #$04
+	sta GBUTTON.Y
+	lda #$01
+	sta GBUTTON.BO
+	sta GBUTTON.BD
+	lda #$02
+	sta GBUTTON.BS
+	lda #$92
+	sta GBUTTON.PA
+	lda #$25
+	sta GBUTTON.PA+1
+	jsr GBUTTON
+	lda GBUTTON.RESULT
+	sta BM
+
+; optimize OK (A8LIBGADG), line = 105
+
+	lda BW
+	sta GBUTTON.BN
+	lda X2
+	sta GBUTTON.X
+	lda #$04
+	sta GBUTTON.Y
+	lda #$01
+	sta GBUTTON.BO
+	lda #$00
+	sta GBUTTON.BD
+	lda #$02
+	sta GBUTTON.BS
+	lda #$92
+	sta GBUTTON.PA
+	lda #$25
+	sta GBUTTON.PA+1
+	jsr GBUTTON
+	mva GBUTTON.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 106
+
+	lda BM
+	cmp #$FE
+	jeq l_15D0
+
+; optimize OK (A8LIBGADG), line = 109
+
+	cmp #$01
+	jne l_160A
+	lda #$01
+	sta RESULT
+	jmp l_1618
+l_160A
+
+; optimize OK (A8LIBGADG), line = 110
+
+	lda #$00
+	sta RESULT
+l_1618
+
+; optimize OK (A8LIBGADG), line = 113
+
+	lda BW
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+@exit
+
+; ------------------------------------------------------------
+
+adr.PS	= [DATAORIGIN+$0D01] .array [39]
+.var PS	= adr.PS .word
+RESULT	= DATAORIGIN+$0D28
+BW	= DATAORIGIN+$0D29
+BL	= DATAORIGIN+$0D2A
+BM	= DATAORIGIN+$0D2B
+X1	= DATAORIGIN+$0D2C
+X2	= DATAORIGIN+$0D2D
+adr.BUTTONS	= CODEORIGIN+$0592
+.var BUTTONS	= adr.BUTTONS .word
+
+@VarData	= PS
+@VarDataSize	= 44
+
+	rts						; ret
+.endl
+
+.local	GPROG						; PROCEDURE
+
+; optimize OK (A8LIBGADG), line = 131
+
+	lda #$14
+	jsr SYSTEM.SPACE
+	inx
+	lda SYSTEM.SPACE.RESULT
+	sta @move.src
+	lda SYSTEM.SPACE.RESULT+1
+	sta @move.src+1
+	@moveSTRING CL #22
+	dex
+
+; optimize OK (A8LIBGADG), line = 135
+
+	lda BS
+	sta :eax
+	lsr @
+	adc #$0d
+	adc :eax
+	ror @
+	lsr @
+	lsr @
+	adc :eax
+	ror @
+	adc :eax
+	ror @
+	lsr @
+	lsr @
+	sta IL
+	lda #$00
+	sta IL+1
+
+; optimize OK (A8LIBGADG), line = 136
+
+	lda <adr.CL+$01
+	sta SYSTEM.FILLCHAR_0529.A
+	lda >adr.CL+$01
+	sta SYSTEM.FILLCHAR_0529.A+1
+	lda IL
+	sta SYSTEM.FILLCHAR_0529.COUNT
+	lda IL+1
+	sta SYSTEM.FILLCHAR_0529.COUNT+1
+	lda #$A0
+	sta SYSTEM.FILLCHAR_0529.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_0529
+	m@INLINE
+	.endl
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 139
+
+	inx
+	mva CL :STACKORIGIN,x
+	mva CL+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0D2E
+X	= DATAORIGIN+$0D2F
+Y	= DATAORIGIN+$0D30
+BS	= DATAORIGIN+$0D31
+IL	= DATAORIGIN+$0D32
+adr.CL	= [DATAORIGIN+$0D34] .array [22]
+.var CL	= adr.CL .word
+
+@VarData	= BN
+@VarDataSize	= 28
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	GBUTTON						; FUNCTION
+
+; optimize OK (A8LIBGADG), line = 161
+
+	lda #$00
+	sta BF
+
+; optimize OK (A8LIBGADG), line = 164
+
+	lda BD
+	sta RESULT
+
+; --- WhileProlog
+	jmp l_1654
+l_1655
+
+; optimize OK (A8LIBGADG), line = 170
+
+	lda #$00
+	sta XP
+
+; optimize OK (A8LIBGADG), line = 171
+
+	sta YP
+
+; optimize OK (A8LIBGADG), line = 173
+
+	sta BL
+	ldy BS
+	dey
+	sty @FORTMP_1669_0
+
+l_166C
+; --- ForToDoCondition
+	lda @FORTMP_1669_0:#$00
+	cmp BL
+	jcc l_167A
+
+; optimize OK (A8LIBGADG), line = 176
+
+	lda BL
+	add #$01
+	cmp RESULT
+	jne l_1692
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 178
+
+	inx
+	mva BL :STACKORIGIN,x
+	mva #$00 :STACKORIGIN+STACKWIDTH,x
+	m@index2 0
+	lda PA
+	add :STACKORIGIN,x
+	sta :bp2
+	lda PA+1
+	adc :STACKORIGIN+STACKWIDTH,x
+	sta :bp2+1
+	ldy #$00
+	mva (:bp2),y :STACKORIGIN,x
+	iny
+	mva (:bp2),y :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	lda Y
+	add YP
+	sta :STACKORIGIN,x
+	inx
+	lda X
+	add XP
+	sta :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+	jmp l_16B8
+l_1692
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 181
+
+	inx
+	mva BL :STACKORIGIN,x
+	mva #$00 :STACKORIGIN+STACKWIDTH,x
+	m@index2 0
+	lda PA
+	add :STACKORIGIN,x
+	sta :bp2
+	lda PA+1
+	adc :STACKORIGIN+STACKWIDTH,x
+	sta :bp2+1
+	ldy #$00
+	mva (:bp2),y :STACKORIGIN,x
+	iny
+	mva (:bp2),y :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	lda Y
+	add YP
+	sta :STACKORIGIN,x
+	inx
+	lda X
+	add XP
+	sta :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+l_16B8
+
+; optimize OK (A8LIBGADG), line = 185
+
+	lda BO
+	cmp #$01
+	jne l_16E6
+
+; optimize OK (A8LIBGADG), line = 188
+
+	lda #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda BL
+	asl @
+	rol :STACKORIGIN+STACKWIDTH+9
+	add PA
+	sta :bp2
+	lda PA+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta :bp2+1
+	ldy #$01
+	lda (:bp2),y
+	sta :bp+1
+	dey
+	lda (:bp2),y
+	tay
+	lda XP
+	add (:bp),y
+	sta XP
+	jmp l_16F3
+l_16E6
+
+; optimize OK (A8LIBGADG), line = 191
+
+	lda YP
+	add #$02
+	sta YP
+l_16F3
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_166C
+l_167A
+
+; optimize OK (A8LIBGADG), line = 196
+
+	lda BD
+	jne l_170B
+
+; optimize OK (A8LIBGADG), line = 198
+
+	lda #$01
+	sta BF
+	jmp l_1719
+l_170B
+
+; optimize OK (A8LIBGADG), line = 202
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta BK
+
+; optimize OK (A8LIBGADG), line = 205
+
+	cmp #$86
+	jeq l_1754x
+	cmp #$06
+	jeq l_1754x
+	cmp #$8E
+	jeq l_1754x
+	cmp #$0E
+	jne l_1754
+l_1754x
+
+; optimize FAIL (0, A8LIBGADG), line = 208
+
+	dec RESULT
+
+; optimize OK (A8LIBGADG), line = 209
+
+	lda RESULT
+	cmp #$01
+	jcs l_176B
+
+; optimize OK (A8LIBGADG), line = 211
+
+	lda BS
+	sta RESULT
+l_176B
+	jmp l_177D
+l_1754
+
+; optimize OK (A8LIBGADG), line = 214
+
+	lda BK
+	cmp #$87
+	jeq l_17B3x
+	cmp #$07
+	jeq l_17B3x
+	cmp #$8F
+	jeq l_17B3x
+	cmp #$0F
+	jne l_17B3
+l_17B3x
+
+; optimize FAIL (0, A8LIBGADG), line = 217
+
+	inc RESULT
+
+; optimize OK (A8LIBGADG), line = 218
+
+	lda BS
+	cmp RESULT
+	jcs l_17CC
+
+; optimize OK (A8LIBGADG), line = 220
+
+	lda #$01
+	sta RESULT
+l_17CC
+	jmp l_17DC
+l_17B3
+
+; optimize OK (A8LIBGADG), line = 223
+
+	lda BK
+	cmp #$1C
+	jne l_17EE
+
+; optimize OK (A8LIBGADG), line = 225
+
+	lda #$FD
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 226
+
+	lda #$01
+	sta BF
+	jmp l_1800
+l_17EE
+
+; optimize OK (A8LIBGADG), line = 228
+
+	lda BK
+	cmp #$2C
+	jne l_1812
+
+; optimize OK (A8LIBGADG), line = 230
+
+	lda #$FE
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 231
+
+	lda #$01
+	sta BF
+	jmp l_1824
+l_1812
+
+; optimize OK (A8LIBGADG), line = 233
+
+	lda BK
+	cmp #$0C
+	jne l_1836
+
+; optimize OK (A8LIBGADG), line = 235
+
+	lda #$01
+	sta BF
+l_1836
+l_1824
+l_1800
+l_17DC
+l_177D
+l_1719
+l_1654
+
+; optimize OK (A8LIBGADG), line = 167
+
+	lda BF
+	jeq l_1655
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0D4A
+X	= DATAORIGIN+$0D4B
+Y	= DATAORIGIN+$0D4C
+BO	= DATAORIGIN+$0D4D
+BD	= DATAORIGIN+$0D4E
+BS	= DATAORIGIN+$0D4F
+adr.PA	= [DATAORIGIN+$0D50] .array [1] .word
+.var PA	= adr.PA .word
+RESULT	= DATAORIGIN+$0D52
+BF	= DATAORIGIN+$0D53
+BL	= DATAORIGIN+$0D54
+BK	= DATAORIGIN+$0D55
+XP	= DATAORIGIN+$0D56
+YP	= DATAORIGIN+$0D57
+
+@VarData	= BN
+@VarDataSize	= 13
+
+	rts						; ret
+.endl
+
+.local	GCHECK						; FUNCTION
+
+; optimize OK (A8LIBGADG), line = 258
+
+	lda #$00
+	sta BF
+
+; optimize OK (A8LIBGADG), line = 261
+
+	lda BD
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 262
+
+	sta BC
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 265
+
+	inx
+	mva #$3E :STACKORIGIN,x
+	mva #$20 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; --- WhileProlog
+	jmp l_1868
+l_1869
+
+; optimize OK (A8LIBGADG), line = 271
+
+	lda BC
+	cmp #$01
+	jne l_187B
+	mva #$01 adr.TMPSTR
+	mva #$58 adr.TMPSTR+1
+	jne l_1885
+l_187B
+	mva #$01 adr.TMPSTR
+	mva #$20 adr.TMPSTR+1
+l_1885
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 278
+
+	inx
+	mva TMPSTR :STACKORIGIN,x
+	mva TMPSTR+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	lda X
+	add #$01
+	sta :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 281
+
+	lda BI
+	jne l_18A8
+
+; optimize OK (A8LIBGADG), line = 283
+
+	lda #$01
+	sta BF
+	jmp l_18B6
+l_18A8
+
+; optimize OK (A8LIBGADG), line = 287
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta BK
+
+; optimize OK (A8LIBGADG), line = 290
+
+	cmp #$1C
+	jne l_18CD
+
+; optimize OK (A8LIBGADG), line = 293
+
+	lda #$FD
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 294
+
+	lda #$01
+	sta BF
+	jmp l_18DF
+l_18CD
+
+; optimize OK (A8LIBGADG), line = 296
+
+	lda BK
+	cmp #$2C
+	jeq l_18FDx
+	cmp #$0C
+	jne l_18FD
+l_18FDx
+
+; optimize OK (A8LIBGADG), line = 299
+
+	lda BC
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 300
+
+	lda #$01
+	sta BF
+	jmp l_1911
+l_18FD
+
+; optimize OK (A8LIBGADG), line = 302
+
+	lda BK
+	cmp #$21
+	jeq l_193Bx
+	cmp #$16
+	jeq l_193Bx
+	cmp #$56
+	jne l_193B
+l_193Bx
+
+; optimize OK (A8LIBGADG), line = 305
+
+	lda BC
+	cmp #$01
+	jne l_194E
+
+; optimize OK (A8LIBGADG), line = 307
+
+	lda #$02
+	sta BC
+	jmp l_195C
+l_194E
+
+; optimize OK (A8LIBGADG), line = 310
+
+	lda #$01
+	sta BC
+l_195C
+
+; optimize OK (A8LIBGADG), line = 312
+
+	lda BC
+	sta RESULT
+l_193B
+l_1911
+l_18DF
+l_18B6
+l_1868
+
+; optimize OK (A8LIBGADG), line = 268
+
+	lda BF
+	jeq l_1869
+
+; optimize OK (A8LIBGADG), line = 318
+
+	lda BC
+	cmp #$01
+	jne l_1983
+	mva #$01 adr.TMPSTR
+	mva #$58 adr.TMPSTR+1
+	jne l_198D
+l_1983
+	mva #$01 adr.TMPSTR
+	mva #$20 adr.TMPSTR+1
+l_198D
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 325
+
+	inx
+	mva TMPSTR :STACKORIGIN,x
+	mva TMPSTR+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	lda X
+	add #$01
+	sta :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0D59
+X	= DATAORIGIN+$0D5A
+Y	= DATAORIGIN+$0D5B
+BI	= DATAORIGIN+$0D5C
+BD	= DATAORIGIN+$0D5D
+RESULT	= DATAORIGIN+$0D5E
+BF	= DATAORIGIN+$0D5F
+BK	= DATAORIGIN+$0D60
+BC	= DATAORIGIN+$0D61
+adr.TMPSTR	= [DATAORIGIN+$0D62] .array [2]
+.var TMPSTR	= adr.TMPSTR .word
+
+@VarData	= BN
+@VarDataSize	= 10
+
+	rts						; ret
+.endl
+
+.local	GRADIO						; FUNCTION
+
+; optimize OK (A8LIBGADG), line = 346
+
+	lda #$00
+	sta BF
+
+; optimize OK (A8LIBGADG), line = 349
+
+	lda BI
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 350
+
+	sta BC
+
+; --- WhileProlog
+	jmp l_19B4
+l_19B5
+
+; optimize OK (A8LIBGADG), line = 356
+
+	lda #$00
+	sta XP
+
+; optimize OK (A8LIBGADG), line = 357
+
+	sta YP
+
+; optimize OK (A8LIBGADG), line = 360
+
+	sta BL
+	ldy BS
+	dey
+	sty @FORTMP_19C9_0
+
+l_19CC
+; --- ForToDoCondition
+	lda @FORTMP_19C9_0:#$00
+	cmp BL
+	jcc l_19DA
+
+; optimize OK (A8LIBGADG), line = 363
+
+	lda Y
+	add YP
+	sta A8LIBWIN.WPOS.Y
+	lda X
+	add XP
+	sta A8LIBWIN.WPOS.X
+	lda BN
+	sta A8LIBWIN.WPOS.BN
+	jsr A8LIBWIN.WPOS
+	mva A8LIBWIN.WPOS.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 364
+
+	lda BL
+	add #$01
+	cmp BC
+	jne l_1A14
+	lda BE
+	jeq l_1A14
+
+; optimize OK (A8LIBGADG), line = 366
+
+	lda BN
+	sta A8LIBWIN.WPUT.BN
+	lda #$9F
+	sta A8LIBWIN.WPUT.X
+	jsr A8LIBWIN.WPUT
+	mva A8LIBWIN.WPUT.RESULT :STACKORIGIN+1,x
+	jmp l_1A23
+l_1A14
+
+; optimize OK (A8LIBGADG), line = 369
+
+	lda BN
+	sta A8LIBWIN.WPUT.BN
+	lda #$20
+	sta A8LIBWIN.WPUT.X
+	jsr A8LIBWIN.WPUT
+	mva A8LIBWIN.WPUT.RESULT :STACKORIGIN+1,x
+l_1A23
+
+; optimize OK (A8LIBGADG), line = 373
+
+	lda Y
+	add YP
+	sta A8LIBWIN.WPOS.Y
+	lda X
+	add XP
+	add #$01
+	sta A8LIBWIN.WPOS.X
+	lda BN
+	sta A8LIBWIN.WPOS.BN
+	jsr A8LIBWIN.WPOS
+	mva A8LIBWIN.WPOS.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 374
+
+	lda BL
+	add #$01
+	cmp RESULT
+	jne l_1A5A
+
+; optimize OK (A8LIBGADG), line = 376
+
+	lda BN
+	sta A8LIBWIN.WPUT.BN
+	lda #$14
+	sta A8LIBWIN.WPUT.X
+	jsr A8LIBWIN.WPUT
+	mva A8LIBWIN.WPUT.RESULT :STACKORIGIN+1,x
+	jmp l_1A69
+l_1A5A
+
+; optimize OK (A8LIBGADG), line = 379
+
+	lda BN
+	sta A8LIBWIN.WPUT.BN
+	lda #$6F
+	sta A8LIBWIN.WPUT.X
+	jsr A8LIBWIN.WPUT
+	mva A8LIBWIN.WPUT.RESULT :STACKORIGIN+1,x
+l_1A69
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 383
+
+	inx
+	mva BL :STACKORIGIN,x
+	mva #$00 :STACKORIGIN+STACKWIDTH,x
+	m@index2 0
+	lda PS
+	add :STACKORIGIN,x
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH,x
+	sta :bp2+1
+	ldy #$00
+	mva (:bp2),y :STACKORIGIN,x
+	iny
+	mva (:bp2),y :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	lda Y
+	add YP
+	sta :STACKORIGIN,x
+	inx
+	lda X
+	add XP
+	sta :STACKORIGIN,x
+	inx
+	mva #$03 :STACKORIGIN,x
+	jsr addAL_CL
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 386
+
+	lda BD
+	cmp #$01
+	jne l_1AA0
+
+; optimize OK (A8LIBGADG), line = 389
+
+	lda #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda BL
+	asl @
+	rol :STACKORIGIN+STACKWIDTH+9
+	add PS
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta :bp2+1
+	ldy #$01
+	lda (:bp2),y
+	sta :bp+1
+	dey
+	lda (:bp2),y
+	tay
+	lda (:bp),y
+	add #$04
+	add XP
+	sta XP
+	jmp l_1AB1
+l_1AA0
+
+; optimize FAIL (0, A8LIBGADG), line = 393
+
+	inc YP
+l_1AB1
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_19CC
+l_19DA
+
+; optimize OK (A8LIBGADG), line = 398
+
+	lda BE
+	jne l_1ACC
+
+; optimize OK (A8LIBGADG), line = 400
+
+	lda #$01
+	sta BF
+	jmp l_1ADA
+l_1ACC
+
+; optimize OK (A8LIBGADG), line = 405
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta BK
+
+; optimize OK (A8LIBGADG), line = 409
+
+	cmp #$86
+	jeq l_1B15x
+	cmp #$06
+	jeq l_1B15x
+	cmp #$8E
+	jeq l_1B15x
+	cmp #$0E
+	jne l_1B15
+l_1B15x
+
+; optimize FAIL (0, A8LIBGADG), line = 412
+
+	dec BC
+
+; optimize OK (A8LIBGADG), line = 413
+
+	lda BC
+	cmp #$01
+	jcs l_1B2C
+
+; optimize OK (A8LIBGADG), line = 415
+
+	lda BS
+	sta BC
+l_1B2C
+	jmp l_1B3E
+l_1B15
+
+; optimize OK (A8LIBGADG), line = 419
+
+	lda BK
+	cmp #$87
+	jeq l_1B74x
+	cmp #$07
+	jeq l_1B74x
+	cmp #$8F
+	jeq l_1B74x
+	cmp #$0F
+	jne l_1B74
+l_1B74x
+
+; optimize FAIL (0, A8LIBGADG), line = 422
+
+	inc BC
+
+; optimize OK (A8LIBGADG), line = 423
+
+	lda BS
+	cmp BC
+	jcs l_1B8D
+
+; optimize OK (A8LIBGADG), line = 425
+
+	lda #$01
+	sta BC
+l_1B8D
+	jmp l_1B9D
+l_1B74
+
+; optimize OK (A8LIBGADG), line = 429
+
+	lda BK
+	cmp #$1C
+	jne l_1BAF
+
+; optimize OK (A8LIBGADG), line = 431
+
+	lda #$FD
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 432
+
+	lda #$01
+	sta BF
+	jmp l_1BC1
+l_1BAF
+
+; optimize OK (A8LIBGADG), line = 435
+
+	lda BK
+	cmp #$21
+	jne l_1BD3
+
+; optimize OK (A8LIBGADG), line = 437
+
+	lda BC
+	sta RESULT
+	jmp l_1BE3
+l_1BD3
+
+; optimize OK (A8LIBGADG), line = 440
+
+	lda BK
+	cmp #$2C
+	jeq l_1C01x
+	cmp #$0C
+	jne l_1C01
+l_1C01x
+
+; optimize OK (A8LIBGADG), line = 442
+
+	lda BC
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 443
+
+	lda #$01
+	sta BF
+l_1C01
+l_1BE3
+l_1BC1
+l_1B9D
+l_1B3E
+l_1ADA
+l_19B4
+
+; optimize OK (A8LIBGADG), line = 353
+
+	lda BF
+	jeq l_19B5
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0D64
+X	= DATAORIGIN+$0D65
+Y	= DATAORIGIN+$0D66
+BD	= DATAORIGIN+$0D67
+BE	= DATAORIGIN+$0D68
+BI	= DATAORIGIN+$0D69
+BS	= DATAORIGIN+$0D6A
+adr.PS	= [DATAORIGIN+$0D6B] .array [1] .word
+.var PS	= adr.PS .word
+RESULT	= DATAORIGIN+$0D6D
+BF	= DATAORIGIN+$0D6E
+BL	= DATAORIGIN+$0D6F
+BK	= DATAORIGIN+$0D70
+BC	= DATAORIGIN+$0D71
+XP	= DATAORIGIN+$0D72
+YP	= DATAORIGIN+$0D73
+
+@VarData	= BN
+@VarDataSize	= 15
+
+	rts						; ret
+.endl
+
+.local	GLIST						; FUNCTION
+
+; optimize OK (A8LIBGADG), line = 471
+
+	lda #$00
+	sta BF
+
+; optimize OK (A8LIBGADG), line = 474
+
+	lda BI
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 475
+
+	ldy BI
+	dey
+	sty BC
+
+; optimize OK (A8LIBGADG), line = 476
+
+	lda BV
+	cmp BI
+	jcs l_1C43
+
+; optimize OK (A8LIBGADG), line = 477
+
+	lda BI
+	sub BV
+	sta BSTART
+	jmp l_1C59
+l_1C43
+
+; optimize OK (A8LIBGADG), line = 478
+
+	lda #$00
+	sta BSTART
+l_1C59
+
+; optimize OK (A8LIBGADG), line = 479
+
+	lda #$00
+	sta SIZE
+
+; --- WhileProlog
+	jmp l_1C63
+l_1C64
+
+; optimize OK (A8LIBGADG), line = 485
+
+	lda #$00
+	sta XP
+
+; optimize OK (A8LIBGADG), line = 486
+
+	sta YP
+
+; optimize OK (A8LIBGADG), line = 487
+
+	lda BS
+	sub #$01
+	sta A8LIBMISC.MIN.Y
+	lda BSTART
+	add BV
+	sub #$01
+	sta A8LIBMISC.MIN.X
+	jsr A8LIBMISC.MIN
+	lda A8LIBMISC.MIN.RESULT
+	sta BEND
+
+; optimize OK (A8LIBGADG), line = 489
+
+	lda #$00
+	sta BL
+	ldy BS
+	dey
+	sty @FORTMP_1C90_0
+
+l_1C93
+; --- ForToDoCondition
+	lda @FORTMP_1C90_0:#$00
+	cmp BL
+	jcc l_1CA1
+
+; optimize OK (A8LIBGADG), line = 491
+
+	lda #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda BL
+	asl @
+	rol :STACKORIGIN+STACKWIDTH+9
+	add PS
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta :bp2+1
+	ldy #$01
+	lda (:bp2),y
+	sta :bp+1
+	dey
+	lda (:bp2),y
+	tay
+	lda (:bp),y
+	sta TMP
+
+; optimize OK (A8LIBGADG), line = 492
+
+	lda SIZE
+	cmp TMP
+	jcs l_1CBB
+	lda TMP
+	sta SIZE
+l_1CBB
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_1C93
+l_1CA1
+
+; optimize OK (A8LIBGADG), line = 494
+
+	lda LINE
+	sta SYSTEM.SETLENGTH.S
+	lda LINE+1
+	sta SYSTEM.SETLENGTH.S+1
+	lda SIZE
+	sta SYSTEM.SETLENGTH.LEN
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBGADG), line = 497
+
+	lda BSTART
+	sta BL
+
+l_1CDC
+; --- ForToDoCondition
+	lda BL
+	cmp BEND
+	scc
+	jne l_1CEA
+
+; optimize OK (A8LIBGADG), line = 500
+
+	cmp BC
+	jne l_1CFE
+
+; optimize OK (A8LIBGADG), line = 501
+
+	lda #$01
+	sta TMP
+	jmp l_1D0C
+l_1CFE
+
+; optimize OK (A8LIBGADG), line = 503
+
+	lda #$00
+	sta TMP
+l_1D0C
+
+; optimize OK (A8LIBGADG), line = 505
+
+	lda #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda BL
+	asl @
+	rol :STACKORIGIN+STACKWIDTH+9
+	add PS
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta :bp2+1
+	ldy #$00
+	lda (:bp2),y
+	sta @move.src
+	iny
+	lda (:bp2),y
+	sta @move.src+1
+	@moveSTRING LINE #41
+
+; optimize OK (A8LIBGADG), line = 506
+
+	lda adr.LINE
+	sta XP
+
+; optimize OK (A8LIBGADG), line = 507
+
+	lda LINE
+	sta SYSTEM.SETLENGTH.S
+	lda LINE+1
+	sta SYSTEM.SETLENGTH.S+1
+	lda SIZE
+	sta SYSTEM.SETLENGTH.LEN
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBGADG), line = 508
+
+	lda SIZE
+	sub XP
+	sta SYSTEM.FILLCHAR_0529.COUNT
+	lda #$00
+	sbc #$00
+	sta SYSTEM.FILLCHAR_0529.COUNT+1
+	lda XP
+	add #$01
+	sta :STACKORIGIN+11
+	lda #$00
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH+11
+	lda <adr.LINE
+	add :STACKORIGIN+11
+	sta SYSTEM.FILLCHAR_0529.A
+	lda >adr.LINE
+	adc :STACKORIGIN+STACKWIDTH+11
+	sta SYSTEM.FILLCHAR_0529.A+1
+	lda #$20
+	sta SYSTEM.FILLCHAR_0529.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_0529
+	m@INLINE
+	.endl
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 509
+
+	inx
+	mva LINE :STACKORIGIN,x
+	mva LINE+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva TMP :STACKORIGIN,x
+	inx
+	lda Y
+	add YP
+	sta :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL (0, A8LIBGADG), line = 510
+
+	inc YP
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_1CDC
+l_1CEA
+
+; optimize OK (A8LIBGADG), line = 516
+
+	lda BE
+	jne l_1D60
+
+; optimize OK (A8LIBGADG), line = 518
+
+	lda #$01
+	sta BF
+	jmp l_1D6E
+l_1D60
+
+; optimize OK (A8LIBGADG), line = 523
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta BK
+
+; optimize OK (A8LIBGADG), line = 527
+
+	cmp #$86
+	jeq l_1DA9x
+	cmp #$06
+	jeq l_1DA9x
+	cmp #$8E
+	jeq l_1DA9x
+	cmp #$0E
+	jne l_1DA9
+l_1DA9x
+
+; optimize OK (A8LIBGADG), line = 530
+
+	lda BS
+	sub #$01
+	sta :STACKORIGIN+10
+	lda BC
+	cmp :STACKORIGIN+10
+	jcs l_1DC2
+	inc BC
+l_1DC2
+
+; optimize OK (A8LIBGADG), line = 531
+
+	lda BSTART
+	add BV
+	sta :STACKORIGIN+10
+	lda #$00
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH+10
+	lda #$00
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH*2+10
+	lda #$00
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH*3+10
+	lda :STACKORIGIN+10
+	sub #$01
+	sta :STACKORIGIN+10
+	lda :STACKORIGIN+STACKWIDTH+10
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH+10
+	lda :STACKORIGIN+STACKWIDTH*2+10
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH*2+10
+	lda :STACKORIGIN+STACKWIDTH*3+10
+	sbc #$00
+	bne @+
+	lda :STACKORIGIN+STACKWIDTH*2+10
+	bne @+
+	lda :STACKORIGIN+STACKWIDTH+10
+	bne @+
+	lda BC
+	cmp :STACKORIGIN+10
+@
+	jcc l_1DE7
+	jeq l_1DE7
+	inc BSTART
+l_1DE7
+	jmp l_1DF7
+l_1DA9
+
+; optimize OK (A8LIBGADG), line = 534
+
+	lda BK
+	cmp #$87
+	jeq l_1E2Dx
+	cmp #$07
+	jeq l_1E2Dx
+	cmp #$8F
+	jeq l_1E2Dx
+	cmp #$0F
+	jne l_1E2D
+l_1E2Dx
+
+; optimize OK (A8LIBGADG), line = 537
+
+	lda BC
+	jeq l_1E40
+	dec BC
+l_1E40
+
+; optimize OK (A8LIBGADG), line = 538
+
+	lda BC
+	cmp BSTART
+	jcs l_1E5B
+	dec BSTART
+l_1E5B
+	jmp l_1E6B
+l_1E2D
+
+; optimize OK (A8LIBGADG), line = 541
+
+	lda BK
+	cmp #$1C
+	jne l_1E7D
+
+; optimize OK (A8LIBGADG), line = 543
+
+	lda #$FD
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 544
+
+	lda #$01
+	sta BF
+	jmp l_1E8F
+l_1E7D
+
+; optimize OK (A8LIBGADG), line = 547
+
+	lda BK
+	cmp #$21
+	jne l_1EA1
+
+; optimize OK (A8LIBGADG), line = 549
+
+	ldy BC
+	iny
+	sty RESULT
+	jmp l_1EB5
+l_1EA1
+
+; optimize OK (A8LIBGADG), line = 552
+
+	lda BK
+	cmp #$2C
+	jeq l_1ED3x
+	cmp #$0C
+	jne l_1ED3
+l_1ED3x
+
+; optimize OK (A8LIBGADG), line = 554
+
+	ldy BC
+	iny
+	sty RESULT
+
+; optimize OK (A8LIBGADG), line = 555
+
+	lda #$01
+	sta BF
+l_1ED3
+l_1EB5
+l_1E8F
+l_1E6B
+l_1DF7
+l_1D6E
+l_1C63
+
+; optimize OK (A8LIBGADG), line = 482
+
+	lda BF
+	jeq l_1C64
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0D75
+X	= DATAORIGIN+$0D76
+Y	= DATAORIGIN+$0D77
+BE	= DATAORIGIN+$0D78
+BI	= DATAORIGIN+$0D79
+BV	= DATAORIGIN+$0D7A
+BS	= DATAORIGIN+$0D7B
+adr.PS	= [DATAORIGIN+$0D7C] .array [1] .word
+.var PS	= adr.PS .word
+RESULT	= DATAORIGIN+$0D7E
+BF	= DATAORIGIN+$0D7F
+BSTART	= DATAORIGIN+$0D80
+BEND	= DATAORIGIN+$0D81
+BK	= DATAORIGIN+$0D82
+BL	= DATAORIGIN+$0D83
+BM	= DATAORIGIN+$0D84
+BC	= DATAORIGIN+$0D85
+XP	= DATAORIGIN+$0D86
+YP	= DATAORIGIN+$0D87
+TMP	= DATAORIGIN+$0D88
+SIZE	= DATAORIGIN+$0D89
+adr.LINE	= [DATAORIGIN+$0D8A] .array [41]
+.var LINE	= adr.LINE .word
+
+@VarData	= BN
+@VarDataSize	= 61
+
+	rts						; ret
+.endl
+
+.local	GCOMBO						; FUNCTION
+
+; optimize OK (A8LIBGADG), line = 581
+
+	lda #$00
+	sta BF
+
+; optimize OK (A8LIBGADG), line = 582
+
+	sta BM
+
+; optimize OK (A8LIBGADG), line = 585
+
+	lda BI
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 586
+
+	sta BC
+
+; optimize OK (A8LIBGADG), line = 589
+
+	lda #$00
+	sta I
+
+l_1F0E
+; --- ForToDoCondition
+	lda I
+	cmp #$01
+	jcs l_1F1C
+
+; optimize OK (A8LIBGADG), line = 591
+
+	lda #$00
+	sta :STACKORIGIN+STACKWIDTH+9
+	lda I
+	asl @
+	rol :STACKORIGIN+STACKWIDTH+9
+	add PS
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH+9
+	sta :bp2+1
+	ldy #$01
+	lda (:bp2),y
+	sta :bp+1
+	dey
+	lda (:bp2),y
+	tay
+	lda (:bp),y
+	sta BA
+
+; optimize OK (A8LIBGADG), line = 592
+
+	lda BL
+	cmp BA
+	jcs l_1F36
+	lda BA
+	sta BL
+l_1F36
+
+; --- ForToDoEpilog
+	inc I
+	jne l_1F0E
+l_1F1C
+
+; --- WhileProlog
+	jmp l_1F46
+l_1F47
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 598
+
+	inx
+	lda BC
+	sub #$01
+	sta :STACKORIGIN,x
+	lda #$00
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH,x
+	m@index2 0
+	lda PS
+	add :STACKORIGIN,x
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH,x
+	sta :bp2+1
+	ldy #$00
+	mva (:bp2),y :STACKORIGIN,x
+	iny
+	mva (:bp2),y :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 599
+
+	lda X
+	add BL
+	sta A8LIBWIN.WPOS.X
+	lda BN
+	sta A8LIBWIN.WPOS.BN
+	lda Y
+	sta A8LIBWIN.WPOS.Y
+	jsr A8LIBWIN.WPOS
+	mva A8LIBWIN.WPOS.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 600
+
+	lda BN
+	sta A8LIBWIN.WPUT.BN
+	lda #$1D
+	sta A8LIBWIN.WPUT.X
+	jsr A8LIBWIN.WPUT
+	mva A8LIBWIN.WPUT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 603
+
+	lda BE
+	jne l_1F82
+
+; optimize OK (A8LIBGADG), line = 605
+
+	lda #$01
+	sta BF
+	jmp l_1F90
+l_1F82
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 609
+
+	inx
+	lda BC
+	sub #$01
+	sta :STACKORIGIN,x
+	lda #$00
+	sbc #$00
+	sta :STACKORIGIN+STACKWIDTH,x
+	m@index2 0
+	lda PS
+	add :STACKORIGIN,x
+	sta :bp2
+	lda PS+1
+	adc :STACKORIGIN+STACKWIDTH,x
+	sta :bp2+1
+	ldy #$00
+	mva (:bp2),y :STACKORIGIN,x
+	iny
+	mva (:bp2),y :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 610
+
+	lda X
+	add BL
+	sta A8LIBWIN.WPOS.X
+	lda BN
+	sta A8LIBWIN.WPOS.BN
+	lda Y
+	sta A8LIBWIN.WPOS.Y
+	jsr A8LIBWIN.WPOS
+	mva A8LIBWIN.WPOS.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 611
+
+	lda BN
+	sta A8LIBWIN.WPUT.BN
+	lda #$9D
+	sta A8LIBWIN.WPUT.X
+	jsr A8LIBWIN.WPUT
+	mva A8LIBWIN.WPUT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 613
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta BK
+
+; optimize OK (A8LIBGADG), line = 617
+
+	cmp #$86
+	jeq l_1FF4x
+	cmp #$06
+	jeq l_1FF4x
+	cmp #$8E
+	jeq l_1FF4x
+	cmp #$0E
+	jne l_1FF4
+l_1FF4x
+
+; optimize FAIL (0, A8LIBGADG), line = 620
+
+	dec BC
+
+; optimize OK (A8LIBGADG), line = 621
+
+	lda BC
+	cmp #$01
+	jcs l_200B
+
+; optimize OK (A8LIBGADG), line = 623
+
+	lda BS
+	sta BC
+l_200B
+	jmp l_201D
+l_1FF4
+
+; optimize OK (A8LIBGADG), line = 627
+
+	lda BK
+	cmp #$87
+	jeq l_2053x
+	cmp #$07
+	jeq l_2053x
+	cmp #$8F
+	jeq l_2053x
+	cmp #$0F
+	jne l_2053
+l_2053x
+
+; optimize FAIL (0, A8LIBGADG), line = 630
+
+	inc BC
+
+; optimize OK (A8LIBGADG), line = 631
+
+	lda BS
+	cmp BC
+	jcs l_206C
+
+; optimize OK (A8LIBGADG), line = 633
+
+	lda #$01
+	sta BC
+l_206C
+	jmp l_207C
+l_2053
+
+; optimize OK (A8LIBGADG), line = 637
+
+	lda BK
+	cmp #$1C
+	jne l_208E
+
+; optimize OK (A8LIBGADG), line = 639
+
+	lda #$FD
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 640
+
+	lda #$01
+	sta BF
+	jmp l_20A0
+l_208E
+
+; optimize OK (A8LIBGADG), line = 643
+
+	lda BK
+	cmp #$2C
+	jne l_20B2
+
+; optimize OK (A8LIBGADG), line = 646
+
+	lda BC
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 647
+
+	lda #$01
+	sta BF
+	jmp l_20C6
+l_20B2
+
+; optimize OK (A8LIBGADG), line = 649
+
+	lda BK
+	cmp #$0C
+	jne l_20D8
+
+; optimize OK (A8LIBGADG), line = 651
+
+	lda BM
+	jne l_20E8
+
+; optimize OK (A8LIBGADG), line = 654
+
+	ldy BN
+	lda A8LIBWIN.adr.BAW.BY,y
+	add Y
+	add #$01
+	sta A8LIBWIN.WOPEN.Y
+	lda A8LIBWIN.adr.BAW.BX,y
+	add X
+	sub #$01
+	sta A8LIBWIN.WOPEN.X
+	lda #$05
+	sta A8LIBWIN.WOPEN.W
+	lda #$0A
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BZ
+
+; optimize OK (A8LIBGADG), line = 656
+
+	sta A8LIBMENU.MENUV.BN
+	lda #$01
+	sta A8LIBMENU.MENUV.X
+	sta A8LIBMENU.MENUV.Y
+	sta A8LIBMENU.MENUV.BI
+	lda BC
+	sta A8LIBMENU.MENUV.BS
+	lda BS
+	sta A8LIBMENU.MENUV.BC
+	lda PS
+	sta A8LIBMENU.MENUV.PS
+	lda PS+1
+	sta A8LIBMENU.MENUV.PS+1
+	jsr A8LIBMENU.MENUV
+	lda A8LIBMENU.MENUV.RESULT
+	sta BC
+
+; optimize OK (A8LIBGADG), line = 657
+
+	lda BZ
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 658
+
+	lda #$01
+	sta BM
+	jmp l_2133
+l_20E8
+
+; optimize OK (A8LIBGADG), line = 662
+
+	lda BC
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 663
+
+	lda #$01
+	sta BF
+l_2133
+l_20D8
+l_20C6
+l_20A0
+l_207C
+l_201D
+l_1F90
+l_1F46
+
+; optimize OK (A8LIBGADG), line = 596
+
+	lda BF
+	jeq l_1F47
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0DB4
+X	= DATAORIGIN+$0DB5
+Y	= DATAORIGIN+$0DB6
+BE	= DATAORIGIN+$0DB7
+BI	= DATAORIGIN+$0DB8
+BS	= DATAORIGIN+$0DB9
+adr.PS	= [DATAORIGIN+$0DBA] .array [1] .word
+.var PS	= adr.PS .word
+RESULT	= DATAORIGIN+$0DBC
+BF	= DATAORIGIN+$0DBD
+BM	= DATAORIGIN+$0DBE
+BL	= DATAORIGIN+$0DBF
+BK	= DATAORIGIN+$0DC0
+BC	= DATAORIGIN+$0DC1
+BZ	= DATAORIGIN+$0DC2
+BA	= DATAORIGIN+$0DC3
+I	= DATAORIGIN+$0DC4
+
+@VarData	= BN
+@VarDataSize	= 16
+
+	rts						; ret
+.endl
+
+.local	GSPIN						; FUNCTION
+
+; optimize OK (A8LIBGADG), line = 689
+
+	lda #$00
+	sta BF
+
+; optimize OK (A8LIBGADG), line = 692
+
+	lda BI
+	sta BD
+
+; optimize OK (A8LIBGADG), line = 695
+
+	lda BM
+	cmp #$FB
+	jcc l_2168
+
+; optimize OK (A8LIBGADG), line = 697
+
+	lda #$FA
+	sta BM
+l_2168
+
+; optimize OK (A8LIBGADG), line = 701
+
+	lda BE
+	jne l_2181
+
+; optimize OK (A8LIBGADG), line = 703
+
+	lda BD
+	jsr A8LIBSTR.BYTETOSTR3
+	inx
+	lda A8LIBSTR.BYTETOSTR3.RESULT
+	sta @move.src
+	lda A8LIBSTR.BYTETOSTR3.RESULT+1
+	sta @move.src+1
+	@moveSTRING CL #5
+	dex
+
+; optimize OK (A8LIBGADG), line = 704
+
+	lda #$01
+	sta BF
+l_2181
+
+; --- WhileProlog
+	jmp l_218E
+l_218F
+
+; optimize OK (A8LIBGADG), line = 711
+
+	lda BD
+	jsr A8LIBSTR.BYTETOSTR3
+	inx
+	lda A8LIBSTR.BYTETOSTR3.RESULT
+	sta @move.src
+	lda A8LIBSTR.BYTETOSTR3.RESULT+1
+	sta @move.src+1
+	@moveSTRING CL #5
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 712
+
+	mva CL :STACKORIGIN,x
+	mva CL+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 715
+
+	lda BE
+	cmp #$01
+	jne l_21B2
+
+; optimize OK (A8LIBGADG), line = 718
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta BK
+
+; optimize OK (A8LIBGADG), line = 721
+
+	cmp #$86
+	jeq l_21EEx
+	cmp #$06
+	jeq l_21EEx
+	cmp #$8F
+	jeq l_21EEx
+	cmp #$0F
+	jne l_21EE
+l_21EEx
+
+; optimize OK (A8LIBGADG), line = 724
+
+	lda BD
+	jeq l_2201
+
+; optimize FAIL (0, A8LIBGADG), line = 726
+
+	dec BD
+l_2201
+
+; optimize OK (A8LIBGADG), line = 728
+
+	lda BD
+	cmp BL
+	jcs l_221C
+
+; optimize OK (A8LIBGADG), line = 730
+
+	lda BL
+	sta BD
+l_221C
+	jmp l_222E
+l_21EE
+
+; optimize OK (A8LIBGADG), line = 733
+
+	lda BK
+	cmp #$87
+	jeq l_2264x
+	cmp #$07
+	jeq l_2264x
+	cmp #$8E
+	jeq l_2264x
+	cmp #$0E
+	jne l_2264
+l_2264x
+
+; optimize FAIL (0, A8LIBGADG), line = 736
+
+	inc BD
+
+; optimize OK (A8LIBGADG), line = 737
+
+	lda BM
+	cmp BD
+	jcs l_227D
+
+; optimize OK (A8LIBGADG), line = 739
+
+	sta BD
+l_227D
+	jmp l_228F
+l_2264
+
+; optimize OK (A8LIBGADG), line = 742
+
+	lda BK
+	cmp #$1C
+	jne l_22A1
+
+; optimize OK (A8LIBGADG), line = 744
+
+	lda #$FD
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 745
+
+	lda #$01
+	sta BF
+
+; optimize OK (A8LIBGADG), line = 746
+
+	lda BI
+	jsr A8LIBSTR.BYTETOSTR3
+	inx
+	lda A8LIBSTR.BYTETOSTR3.RESULT
+	sta @move.src
+	lda A8LIBSTR.BYTETOSTR3.RESULT+1
+	sta @move.src+1
+	@moveSTRING CL #5
+	dex
+	jmp l_22B7
+l_22A1
+
+; optimize OK (A8LIBGADG), line = 748
+
+	lda BK
+	cmp #$2C
+	jeq l_22D5x
+	cmp #$0C
+	jne l_22D5
+l_22D5x
+
+; optimize OK (A8LIBGADG), line = 750
+
+	lda BD
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 751
+
+	lda #$01
+	sta BF
+
+; optimize OK (A8LIBGADG), line = 752
+
+	lda BD
+	jsr A8LIBSTR.BYTETOSTR3
+	inx
+	lda A8LIBSTR.BYTETOSTR3.RESULT
+	sta @move.src
+	lda A8LIBSTR.BYTETOSTR3.RESULT+1
+	sta @move.src+1
+	@moveSTRING CL #5
+	dex
+l_22D5
+l_22B7
+l_228F
+l_222E
+l_21B2
+l_218E
+
+; optimize OK (A8LIBGADG), line = 708
+
+	lda BF
+	jeq l_218F
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 758
+
+	inx
+	mva CL :STACKORIGIN,x
+	mva CL+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0DC5
+X	= DATAORIGIN+$0DC6
+Y	= DATAORIGIN+$0DC7
+BL	= DATAORIGIN+$0DC8
+BM	= DATAORIGIN+$0DC9
+BI	= DATAORIGIN+$0DCA
+BE	= DATAORIGIN+$0DCB
+RESULT	= DATAORIGIN+$0DCC
+BD	= DATAORIGIN+$0DCD
+BK	= DATAORIGIN+$0DCE
+BF	= DATAORIGIN+$0DCF
+adr.CL	= [DATAORIGIN+$0DD0] .array [5]
+.var CL	= adr.CL .word
+
+@VarData	= BN
+@VarDataSize	= 15
+
+	rts						; ret
+.endl
+
+.local	GINPUT						; FUNCTION
+
+; optimize OK (A8LIBGADG), line = 780
+
+	lda #$00
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 781
+
+	sta BD
+
+; optimize OK (A8LIBGADG), line = 782
+
+	sta BE
+
+; optimize OK (A8LIBGADG), line = 783
+
+	sta BF
+
+; optimize OK (A8LIBGADG), line = 786
+
+	ldy PS+1
+	sty :bp+1
+	ldy PS
+	lda (:bp),y
+	sta BZ
+
+; optimize OK (A8LIBGADG), line = 789
+
+	ldy PS+1
+	sty :bp+1
+	ldy PS
+	lda (:bp),y
+	sta SYSTEM.SETLENGTH.LEN
+	lda CE
+	sta SYSTEM.SETLENGTH.S
+	lda CE+1
+	sta SYSTEM.SETLENGTH.S+1
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBGADG), line = 790
+
+	ldy PS+1
+	sty :bp+1
+	ldy PS
+	lda (:bp),y
+	sta SYSTEM.MOVE_052C.COUNT
+	lda <adr.CE+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CE+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda PS
+	add #$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda PS+1
+	adc #$00
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; --- WhileProlog
+	jmp l_231D
+l_231E
+
+; optimize OK (A8LIBGADG), line = 796
+
+	lda CD
+	sta SYSTEM.SETLENGTH.S
+	lda CD+1
+	sta SYSTEM.SETLENGTH.S+1
+	lda BS
+	sta SYSTEM.SETLENGTH.LEN
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBGADG), line = 797
+
+	lda <adr.CD+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CD+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda BD
+	add #$01
+	sta :STACKORIGIN+11
+	lda #$00
+	adc #$00
+	sta :STACKORIGIN+STACKWIDTH+11
+	lda <adr.CE
+	add :STACKORIGIN+11
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.CE
+	adc :STACKORIGIN+STACKWIDTH+11
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda BS
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBGADG), line = 800
+
+	lda BE
+	sub BD
+	sta BI
+
+; optimize OK (A8LIBGADG), line = 801
+
+	lda BS
+	sub #$01
+	cmp BI
+	jcs l_2354
+
+; optimize OK (A8LIBGADG), line = 803
+
+	ldy BS
+	dey
+	sty BI
+l_2354
+
+; optimize OK (A8LIBGADG), line = 805
+
+	ldy BI
+	lda adr.CD+$01,y
+	eor #$80
+	sta adr.CD+$01,y
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 808
+
+	inx
+	mva CD :STACKORIGIN,x
+	mva CD+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (A8LIBGADG), line = 811
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	lda A8LIBMISC.WAITKCX.RESULT
+	sta BK
+
+; optimize OK (A8LIBGADG), line = 814
+
+	jsr A8LIBMISC.IKC2ATA
+	lda A8LIBMISC.IKC2ATA.RESULT
+	sta BC
+
+; optimize OK (A8LIBGADG), line = 817
+
+	lda BK
+	cmp #$87
+	jne l_23A4
+
+; optimize FAIL (0, A8LIBGADG), line = 819
+
+	inc BE
+	jmp l_23B2
+l_23A4
+
+; optimize OK (A8LIBGADG), line = 822
+
+	lda BK
+	cmp #$86
+	jne l_23C4
+
+; optimize OK (A8LIBGADG), line = 825
+
+	lda BE
+	jeq l_23D7
+
+; optimize FAIL (0, A8LIBGADG), line = 827
+
+	dec BE
+l_23D7
+	jmp l_23E7
+l_23C4
+
+; optimize OK (A8LIBGADG), line = 831
+
+	lda BK
+	cmp #$FE
+	jne l_23F9
+
+; optimize OK (A8LIBGADG), line = 833
+
+	lda #$00
+	sta BE
+	jmp l_2407
+l_23F9
+
+; optimize OK (A8LIBGADG), line = 836
+
+	lda BK
+	cmp #$EA
+	jne l_2419
+
+; optimize OK (A8LIBGADG), line = 838
+
+	lda BZ
+	sta BE
+	jmp l_2429
+l_2419
+
+; optimize OK (A8LIBGADG), line = 842
+
+	lda BK
+	cmp #$34
+	jne l_243B
+
+; optimize OK (A8LIBGADG), line = 845
+
+	lda BE
+	jeq l_244E
+
+; optimize FAIL (0, A8LIBGADG), line = 847
+
+	dec BE
+
+; optimize OK (A8LIBGADG), line = 849
+
+	ldy BE
+	iny
+	sty BL
+	ldy BZ
+	dey
+	sty @FORTMP_2465_0
+
+l_2468
+; --- ForToDoCondition
+	lda @FORTMP_2465_0:#$00
+	cmp BL
+	jcc l_2476
+
+; optimize OK (A8LIBGADG), line = 851
+
+	ldy BL
+	lda adr.CE+$01,y
+	sta adr.CE,y
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_2468
+l_2476
+l_244E
+	jmp l_2496
+l_243B
+
+; optimize OK (A8LIBGADG), line = 856
+
+	lda BK
+	cmp #$74
+	jne l_24A8
+
+; optimize OK (A8LIBGADG), line = 858
+
+	lda <adr.CE+$01
+	sta SYSTEM.FILLCHAR_0529.A
+	lda >adr.CE+$01
+	sta SYSTEM.FILLCHAR_0529.A+1
+	lda BZ
+	sta SYSTEM.FILLCHAR_0529.COUNT
+	lda #$00
+	sta SYSTEM.FILLCHAR_0529.COUNT+1
+	lda #$20
+	sta SYSTEM.FILLCHAR_0529.VALUE
+	.local +MAIN.SYSTEM.FILLCHAR_0529
+	m@INLINE
+	.endl
+	jmp l_24B8
+l_24A8
+
+; optimize OK (A8LIBGADG), line = 861
+
+	lda BK
+	cmp #$B4
+	jne l_24CA
+
+; optimize OK (A8LIBGADG), line = 864
+
+	lda CE
+	sta SYSTEM.SETLENGTH.S
+	lda CE+1
+	sta SYSTEM.SETLENGTH.S+1
+	lda BZ
+	sta SYSTEM.SETLENGTH.LEN
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBGADG), line = 865
+
+	ldy BE
+	iny
+	sty BL
+	ldy BZ
+	dey
+	sty @FORTMP_24E3_0
+
+l_24E6
+; --- ForToDoCondition
+	lda @FORTMP_24E3_0:#$00
+	cmp BL
+	jcc l_24F4
+
+; optimize OK (A8LIBGADG), line = 867
+
+	ldy BL
+	lda adr.CE+$01,y
+	sta adr.CE,y
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_24E6
+l_24F4
+
+; optimize OK (A8LIBGADG), line = 871
+
+	ldy BZ
+	lda #$20
+	sta adr.CE,y
+	jmp l_2519
+l_24CA
+
+; optimize OK (A8LIBGADG), line = 874
+
+	lda BK
+	cmp #$B7
+	jne l_252B
+
+; optimize OK (A8LIBGADG), line = 877
+
+	lda BE
+	cmp BZ
+	jcs l_2540
+
+; optimize OK (A8LIBGADG), line = 880
+
+	lda BZ
+	sta BL
+
+; --- WhileProlog
+	jmp l_2549
+l_254A
+
+; optimize OK (A8LIBGADG), line = 883
+
+	ldy BL
+	lda adr.CE,y
+	sta adr.CE+$01,y
+
+; optimize FAIL (0, A8LIBGADG), line = 884
+
+	dec BL
+l_2549
+
+; optimize OK (A8LIBGADG), line = 881
+
+	lda BE
+	add #$01
+	sta :STACKORIGIN+10
+	lda BL
+	cmp :STACKORIGIN+10
+	jcc l_254A
+
+; optimize OK (A8LIBGADG), line = 888
+
+	ldy BE
+	lda #$20
+	sta adr.CE+$01,y
+l_2540
+	jmp l_2586
+l_252B
+
+; optimize OK (A8LIBGADG), line = 892
+
+	lda BK
+	cmp #$0C
+	jne l_2598
+
+; optimize OK (A8LIBGADG), line = 895
+
+	lda adr.CE
+	sta SYSTEM.SETLENGTH.LEN
+	lda PS
+	sta SYSTEM.SETLENGTH.S
+	lda PS+1
+	sta SYSTEM.SETLENGTH.S+1
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBGADG), line = 896
+
+	lda adr.CE
+	sta SYSTEM.MOVE_052C.COUNT
+	lda PS
+	add #$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda PS+1
+	adc #$00
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda <adr.CE+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.CE+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBGADG), line = 897
+
+	lda #$01
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 898
+
+	sta BF
+	jmp l_25B0
+l_2598
+
+; optimize OK (A8LIBGADG), line = 901
+
+	lda BK
+	cmp #$1C
+	jne l_25C2
+
+; optimize OK (A8LIBGADG), line = 904
+
+	ldy PS+1
+	sty :bp+1
+	ldy PS
+	lda (:bp),y
+	sta SYSTEM.SETLENGTH.LEN
+	lda CE
+	sta SYSTEM.SETLENGTH.S
+	lda CE+1
+	sta SYSTEM.SETLENGTH.S+1
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBGADG), line = 905
+
+	lda adr.CE
+	sta SYSTEM.MOVE_052C.COUNT
+	lda <adr.CE+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CE+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda PS
+	add #$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda PS+1
+	adc #$00
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBGADG), line = 906
+
+	lda #$FD
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 907
+
+	lda #$01
+	sta BF
+	jmp l_25DA
+l_25C2
+
+; optimize OK (A8LIBGADG), line = 910
+
+	lda BK
+	cmp #$2C
+	jne l_25EC
+
+; optimize OK (A8LIBGADG), line = 913
+
+	ldy PS+1
+	sty :bp+1
+	ldy PS
+	lda (:bp),y
+	sta SYSTEM.SETLENGTH.LEN
+	lda CE
+	sta SYSTEM.SETLENGTH.S
+	lda CE+1
+	sta SYSTEM.SETLENGTH.S+1
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBGADG), line = 914
+
+	lda adr.CE
+	sta SYSTEM.MOVE_052C.COUNT
+	lda <adr.CE+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CE+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda PS
+	add #$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda PS+1
+	adc #$00
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize OK (A8LIBGADG), line = 915
+
+	lda #$FE
+	sta RESULT
+
+; optimize OK (A8LIBGADG), line = 916
+
+	lda #$01
+	sta BF
+	jmp l_2604
+l_25EC
+
+; optimize OK (A8LIBGADG), line = 920
+
+	lda BC
+	cmp #$01
+	jcc l_2622
+	lda #$BF
+	cmp BC
+	jcc l_2622
+
+; optimize OK (A8LIBGADG), line = 923
+
+	lda #$00
+	sta BP
+
+; optimize OK (A8LIBGADG), line = 927
+
+	ldy #1
+	lda BT
+	beq @+
+	dey
+@
+	sty :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$1C
+	bcc @+
+	beq @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda BC
+	cmp #$20
+	bcs @+
+	dey
+@
+	tya
+	ora :STACKORIGIN+10
+	and :STACKORIGIN+9
+	jeq l_2651
+
+; optimize OK (A8LIBGADG), line = 929
+
+	lda #$01
+	sta BP
+	jmp l_265F
+l_2651
+
+; optimize OK (A8LIBGADG), line = 932
+
+	lda BT
+	cmp #$01
+	jne l_2671
+
+; optimize OK (A8LIBGADG), line = 934
+
+	ldy #1
+	lda BC
+	cmp #$20
+	beq @+
+	dey
+@
+	sty :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$30
+	bcs @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda #$39
+	cmp BC
+	bcs @+
+	dey
+@
+	tya
+	and :STACKORIGIN+10
+	ora :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$41
+	bcs @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda #$5A
+	cmp BC
+	bcs @+
+	dey
+@
+	tya
+	and :STACKORIGIN+10
+	ora :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$61
+	bcs @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda #$7A
+	cmp BC
+	bcs @+
+	dey
+@
+	tya
+	and :STACKORIGIN+10
+	ora :STACKORIGIN+9
+	jeq l_26CC
+
+; optimize OK (A8LIBGADG), line = 938
+
+	lda #$01
+	sta BP
+l_26CC
+	jmp l_26DC
+l_2671
+
+; optimize OK (A8LIBGADG), line = 942
+
+	lda BT
+	cmp #$02
+	jne l_26EE
+
+; optimize OK (A8LIBGADG), line = 944
+
+	ldy #1
+	lda BC
+	cmp #$20
+	beq @+
+	dey
+@
+	sty :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$41
+	bcs @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda #$5A
+	cmp BC
+	bcs @+
+	dey
+@
+	tya
+	and :STACKORIGIN+10
+	ora :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$61
+	bcs @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda #$7A
+	cmp BC
+	bcs @+
+	dey
+@
+	tya
+	and :STACKORIGIN+10
+	ora :STACKORIGIN+9
+	jeq l_2731
+
+; optimize OK (A8LIBGADG), line = 947
+
+	lda #$01
+	sta BP
+l_2731
+	jmp l_2741
+l_26EE
+
+; optimize OK (A8LIBGADG), line = 951
+
+	lda BT
+	cmp #$03
+	jne l_2753
+
+; optimize OK (A8LIBGADG), line = 953
+
+	ldy #1
+	lda BC
+	cmp #$2D
+	beq @+
+	dey
+@
+	sty :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$2E
+	beq @+
+	dey
+@
+	tya
+	ora :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$30
+	bcs @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda #$39
+	cmp BC
+	bcs @+
+	dey
+@
+	tya
+	and :STACKORIGIN+10
+	ora :STACKORIGIN+9
+	jeq l_278A
+
+; optimize OK (A8LIBGADG), line = 956
+
+	lda #$01
+	sta BP
+l_278A
+	jmp l_279A
+l_2753
+
+; optimize OK (A8LIBGADG), line = 960
+
+	lda BT
+	cmp #$04
+	jne l_27AC
+
+; optimize OK (A8LIBGADG), line = 962
+
+	ldy #1
+	lda BC
+	cmp #$2D
+	beq @+
+	dey
+@
+	sty :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$2E
+	beq @+
+	dey
+@
+	tya
+	ora :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$30
+	bcs @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda #$39
+	cmp BC
+	bcs @+
+	dey
+@
+	tya
+	and :STACKORIGIN+10
+	ora :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$41
+	bcs @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda #$5A
+	cmp BC
+	bcs @+
+	dey
+@
+	tya
+	and :STACKORIGIN+10
+	ora :STACKORIGIN+9
+	sta :STACKORIGIN+9
+	ldy #1
+	lda BC
+	cmp #$61
+	bcs @+
+	dey
+@
+	sty :STACKORIGIN+10
+	ldy #1
+	lda #$7A
+	cmp BC
+	bcs @+
+	dey
+@
+	tya
+	and :STACKORIGIN+10
+	ora :STACKORIGIN+9
+	jeq l_2813
+
+; optimize OK (A8LIBGADG), line = 967
+
+	lda #$01
+	sta BP
+l_2813
+l_27AC
+l_279A
+l_2741
+l_26DC
+l_265F
+
+; optimize OK (A8LIBGADG), line = 972
+
+	lda BP
+	jeq l_2828
+
+; optimize OK (A8LIBGADG), line = 974
+
+	ldy BE
+	lda BC
+	sta adr.CE+$01,y
+
+; optimize FAIL (0, A8LIBGADG), line = 975
+
+	inc BE
+l_2828
+l_2622
+l_2604
+l_25DA
+l_25B0
+l_2586
+l_2519
+l_24B8
+l_2496
+l_2429
+l_2407
+l_23E7
+l_23B2
+
+; optimize OK (A8LIBGADG), line = 982
+
+	lda BZ
+	sub #$01
+	cmp BE
+	jcs l_2856
+
+; optimize OK (A8LIBGADG), line = 984
+
+	ldy BZ
+	dey
+	sty BE
+l_2856
+
+; optimize OK (A8LIBGADG), line = 988
+
+	lda BE
+	cmp BS
+	jcc l_2877
+
+; optimize OK (A8LIBGADG), line = 990
+
+	sub BS
+	add #$01
+	sta BD
+	jmp l_2891
+l_2877
+
+; optimize OK (A8LIBGADG), line = 993
+
+	lda BE
+	cmp BS
+	jcs l_28A5
+
+; optimize OK (A8LIBGADG), line = 995
+
+	lda #$00
+	sta BD
+l_28A5
+l_2891
+l_231D
+
+; optimize OK (A8LIBGADG), line = 793
+
+	lda BF
+	jeq l_231E
+
+; optimize OK (A8LIBGADG), line = 1000
+
+	lda CD
+	sta SYSTEM.SETLENGTH.S
+	lda CD+1
+	sta SYSTEM.SETLENGTH.S+1
+	lda BS
+	sta SYSTEM.SETLENGTH.LEN
+	jsr SYSTEM.SETLENGTH
+
+; optimize OK (A8LIBGADG), line = 1001
+
+	lda <adr.CD+$01
+	sta SYSTEM.MOVE_052C.DEST
+	lda >adr.CD+$01
+	sta SYSTEM.MOVE_052C.DEST+1
+	lda <adr.CE+$01
+	sta SYSTEM.MOVE_052C.SOURCE
+	lda >adr.CE+$01
+	sta SYSTEM.MOVE_052C.SOURCE+1
+	lda BS
+	sta SYSTEM.MOVE_052C.COUNT
+	lda #$00
+	sta SYSTEM.MOVE_052C.COUNT+1
+	.local +MAIN.SYSTEM.MOVE_052C
+	m@INLINE
+	.endl
+
+; optimize FAIL ('A8LIBWIN.WPRINT', A8LIBGADG), line = 1002
+
+	inx
+	mva CD :STACKORIGIN,x
+	mva CD+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva Y :STACKORIGIN,x
+	inx
+	mva X :STACKORIGIN,x
+	inx
+	mva BN :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+@exit
+
+; ------------------------------------------------------------
+
+BN	= DATAORIGIN+$0DD5
+X	= DATAORIGIN+$0DD6
+Y	= DATAORIGIN+$0DD7
+BT	= DATAORIGIN+$0DD8
+BS	= DATAORIGIN+$0DD9
+PS	= DATAORIGIN+$0DDA
+RESULT	= DATAORIGIN+$0DDC
+BF	= DATAORIGIN+$0DDD
+BP	= DATAORIGIN+$0DDE
+BD	= DATAORIGIN+$0DDF
+BE	= DATAORIGIN+$0DE0
+BK	= DATAORIGIN+$0DE1
+BC	= DATAORIGIN+$0DE2
+BL	= DATAORIGIN+$0DE3
+BZ	= DATAORIGIN+$0DE4
+BI	= DATAORIGIN+$0DE5
+adr.CD	= [DATAORIGIN+$0DE6] .array [42]
+.var CD	= adr.CD .word
+adr.CE	= [DATAORIGIN+$0E10] .array [129]
+.var CE	= adr.CE .word
+
+@VarData	= BN
+@VarDataSize	= 187
+
+	rts						; ret
+.endl
+
+; ------------------------------------------------------------
+
+.endl							; UNIT A8LIBGADG
+
+.local	FILEINPUT					; FUNCTION
+
+; optimize OK (fullappdemo.pas), line = 46
+
+	lda #$00
+	sta RESULT
+
+; optimize OK (fullappdemo.pas), line = 47
+
+	lda #$01
+	sta SELECTED_DRIVE
+	ldy #256-13
+	mva:rne CODEORIGIN+$00EB+13-256,y adr.SELECTED_FILE+13-256,y+
+
+; optimize OK (fullappdemo.pas), line = 49
+
+	lda #$01
+	sta SELECTED_LIST
+
+; optimize OK (fullappdemo.pas), line = 51
+
+	lda #$05
+	sta A8LIBWIN.WOPEN.X
+	lda #$04
+	sta A8LIBWIN.WOPEN.Y
+	lda #$1E
+	sta A8LIBWIN.WOPEN.W
+	lda #$10
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta WIN_FILE
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 52
+
+	inx
+	mva #$F9 :STACKORIGIN,x
+	mva #$20 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FB :STACKORIGIN,x
+	inx
+	mva #$F1 :STACKORIGIN,x
+	inx
+	mva WIN_FILE :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 55
+
+	inx
+	mva #$06 :STACKORIGIN,x
+	mva #$21 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	sta :STACKORIGIN,x
+	inx
+	mva WIN_FILE :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 56
+
+	lda WIN_FILE
+	sta A8LIBWIN.WDIV.BN
+	lda #$03
+	sta A8LIBWIN.WDIV.Y
+	lda #$01
+	sta A8LIBWIN.WDIV.BD
+	jsr A8LIBWIN.WDIV
+	mva A8LIBWIN.WDIV.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 58
+
+	inx
+	mva #$0D :STACKORIGIN,x
+	mva #$21 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$04 :STACKORIGIN,x
+	inx
+	mva #$15 :STACKORIGIN,x
+	inx
+	mva WIN_FILE :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 59
+
+	lda WIN_FILE
+	sta A8LIBGADG.GCOMBO.BN
+	lda #$15
+	sta A8LIBGADG.GCOMBO.X
+	lda #$05
+	sta A8LIBGADG.GCOMBO.Y
+	lda #$00
+	sta A8LIBGADG.GCOMBO.BE
+	lda SELECTED_DRIVE
+	sta A8LIBGADG.GCOMBO.BI
+	lda #$08
+	sta A8LIBGADG.GCOMBO.BS
+	lda #$9C
+	sta A8LIBGADG.GCOMBO.PS
+	lda #$25
+	sta A8LIBGADG.GCOMBO.PS+1
+	jsr A8LIBGADG.GCOMBO
+	mva A8LIBGADG.GCOMBO.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 62
+
+	lda WIN_FILE
+	sta A8LIBGADG.GLIST.BN
+	lda #$02
+	sta A8LIBGADG.GLIST.X
+	lda #$05
+	sta A8LIBGADG.GLIST.Y
+	lda #$00
+	sta A8LIBGADG.GLIST.BE
+	lda SELECTED_LIST
+	sta A8LIBGADG.GLIST.BI
+	lda #$06
+	sta A8LIBGADG.GLIST.BV
+	lda #$09
+	sta A8LIBGADG.GLIST.BS
+	lda LIST_FILES
+	sta A8LIBGADG.GLIST.PS
+	lda LIST_FILES+1
+	sta A8LIBGADG.GLIST.PS+1
+	jsr A8LIBGADG.GLIST
+	mva A8LIBGADG.GLIST.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 64
+
+	lda WIN_FILE
+	sta A8LIBGADG.GBUTTON.BN
+	lda #$13
+	sta A8LIBGADG.GBUTTON.X
+	lda #$0B
+	sta A8LIBGADG.GBUTTON.Y
+	lda #$02
+	sta A8LIBGADG.GBUTTON.BO
+	lda #$00
+	sta A8LIBGADG.GBUTTON.BD
+	lda #$02
+	sta A8LIBGADG.GBUTTON.BS
+	lda #$AC
+	sta A8LIBGADG.GBUTTON.PA
+	lda #$25
+	sta A8LIBGADG.GBUTTON.PA+1
+	jsr A8LIBGADG.GBUTTON
+	mva A8LIBGADG.GBUTTON.RESULT :STACKORIGIN+1,x
+
+; --- RepeatUntilProlog
+l_2929
+
+; optimize OK (fullappdemo.pas), line = 68
+
+	lda WIN_FILE
+	sta A8LIBGADG.GINPUT.BN
+	lda #$08
+	sta A8LIBGADG.GINPUT.X
+	lda #$02
+	sta A8LIBGADG.GINPUT.Y
+	lda #$04
+	sta A8LIBGADG.GINPUT.BT
+	lda #$0C
+	sta A8LIBGADG.GINPUT.BS
+	lda SELECTED_FILE
+	sta A8LIBGADG.GINPUT.PS
+	lda SELECTED_FILE+1
+	sta A8LIBGADG.GINPUT.PS+1
+	jsr A8LIBGADG.GINPUT
+	lda A8LIBGADG.GINPUT.RESULT
+	sta READ_FILE
+
+; optimize OK (fullappdemo.pas), line = 71
+
+	lda WIN_FILE
+	sta A8LIBGADG.GCOMBO.BN
+	lda #$15
+	sta A8LIBGADG.GCOMBO.X
+	lda #$05
+	sta A8LIBGADG.GCOMBO.Y
+	lda #$01
+	sta A8LIBGADG.GCOMBO.BE
+	lda SELECTED_DRIVE
+	sta A8LIBGADG.GCOMBO.BI
+	lda #$08
+	sta A8LIBGADG.GCOMBO.BS
+	lda #$9C
+	sta A8LIBGADG.GCOMBO.PS
+	lda #$25
+	sta A8LIBGADG.GCOMBO.PS+1
+	jsr A8LIBGADG.GCOMBO
+	lda A8LIBGADG.GCOMBO.RESULT
+	sta READ_DRIVE
+
+; optimize OK (fullappdemo.pas), line = 72
+
+	cmp #$FD
+	jeq l_2957
+
+; optimize OK (fullappdemo.pas), line = 74
+
+	sta SELECTED_DRIVE
+l_2957
+
+; optimize OK (fullappdemo.pas), line = 76
+
+	lda WIN_FILE
+	sta A8LIBGADG.GCOMBO.BN
+	lda #$15
+	sta A8LIBGADG.GCOMBO.X
+	lda #$05
+	sta A8LIBGADG.GCOMBO.Y
+	lda #$00
+	sta A8LIBGADG.GCOMBO.BE
+	lda SELECTED_DRIVE
+	sta A8LIBGADG.GCOMBO.BI
+	lda #$08
+	sta A8LIBGADG.GCOMBO.BS
+	lda #$9C
+	sta A8LIBGADG.GCOMBO.PS
+	lda #$25
+	sta A8LIBGADG.GCOMBO.PS+1
+	jsr A8LIBGADG.GCOMBO
+	mva A8LIBGADG.GCOMBO.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 79
+
+	lda WIN_FILE
+	sta A8LIBGADG.GLIST.BN
+	lda #$02
+	sta A8LIBGADG.GLIST.X
+	lda #$05
+	sta A8LIBGADG.GLIST.Y
+	lda #$01
+	sta A8LIBGADG.GLIST.BE
+	lda SELECTED_LIST
+	sta A8LIBGADG.GLIST.BI
+	lda #$06
+	sta A8LIBGADG.GLIST.BV
+	lda #$09
+	sta A8LIBGADG.GLIST.BS
+	lda LIST_FILES
+	sta A8LIBGADG.GLIST.PS
+	lda LIST_FILES+1
+	sta A8LIBGADG.GLIST.PS+1
+	jsr A8LIBGADG.GLIST
+	lda A8LIBGADG.GLIST.RESULT
+	sta READ_LIST
+
+; optimize OK (fullappdemo.pas), line = 80
+
+	cmp #$FD
+	jeq l_298F
+
+; optimize OK (fullappdemo.pas), line = 82
+
+	sta SELECTED_LIST
+l_298F
+
+; optimize OK (fullappdemo.pas), line = 84
+
+	lda WIN_FILE
+	sta A8LIBGADG.GLIST.BN
+	lda #$02
+	sta A8LIBGADG.GLIST.X
+	lda #$05
+	sta A8LIBGADG.GLIST.Y
+	lda #$00
+	sta A8LIBGADG.GLIST.BE
+	lda SELECTED_LIST
+	sta A8LIBGADG.GLIST.BI
+	lda #$06
+	sta A8LIBGADG.GLIST.BV
+	lda #$09
+	sta A8LIBGADG.GLIST.BS
+	lda LIST_FILES
+	sta A8LIBGADG.GLIST.PS
+	lda LIST_FILES+1
+	sta A8LIBGADG.GLIST.PS+1
+	jsr A8LIBGADG.GLIST
+	mva A8LIBGADG.GLIST.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 87
+
+	lda WIN_FILE
+	sta A8LIBGADG.GBUTTON.BN
+	lda #$13
+	sta A8LIBGADG.GBUTTON.X
+	lda #$0B
+	sta A8LIBGADG.GBUTTON.Y
+	lda #$02
+	sta A8LIBGADG.GBUTTON.BO
+	lda #$01
+	sta A8LIBGADG.GBUTTON.BD
+	lda #$02
+	sta A8LIBGADG.GBUTTON.BS
+	lda #$AC
+	sta A8LIBGADG.GBUTTON.PA
+	lda #$25
+	sta A8LIBGADG.GBUTTON.PA+1
+	jsr A8LIBGADG.GBUTTON
+	lda A8LIBGADG.GBUTTON.RESULT
+	sta BM
+
+; optimize OK (fullappdemo.pas), line = 88
+
+	lda WIN_FILE
+	sta A8LIBGADG.GBUTTON.BN
+	lda #$13
+	sta A8LIBGADG.GBUTTON.X
+	lda #$0B
+	sta A8LIBGADG.GBUTTON.Y
+	lda #$02
+	sta A8LIBGADG.GBUTTON.BO
+	lda #$00
+	sta A8LIBGADG.GBUTTON.BD
+	lda #$02
+	sta A8LIBGADG.GBUTTON.BS
+	lda #$AC
+	sta A8LIBGADG.GBUTTON.PA
+	lda #$25
+	sta A8LIBGADG.GBUTTON.PA+1
+	jsr A8LIBGADG.GBUTTON
+	mva A8LIBGADG.GBUTTON.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 90
+
+	lda BM
+	cmp #$FE
+	jeq l_2929
+
+; optimize OK (fullappdemo.pas), line = 92
+
+	cmp #$01
+	jne l_29DC
+
+; optimize OK (fullappdemo.pas), line = 94
+
+	lda #$01
+	sta RESULT
+
+; optimize FAIL ('A8LIBGADG.GALERT', fullappdemo.pas), line = 95
+
+	inx
+	mva #$15 :STACKORIGIN,x
+	mva #$21 :STACKORIGIN+STACKWIDTH,x
+	jsr A8LIBGADG.GALERT
+l_29DC
+
+; optimize OK (fullappdemo.pas), line = 98
+
+	lda WIN_FILE
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+@exit
+
+; ------------------------------------------------------------
+
+RESULT	= DATAORIGIN+$0E97
+WIN_FILE	= DATAORIGIN+$0E98
+READ_DRIVE	= DATAORIGIN+$0E99
+SELECTED_DRIVE	= DATAORIGIN+$0E9A
+READ_FILE	= DATAORIGIN+$0E9B
+adr.SELECTED_FILE	= [DATAORIGIN+$0E9C] .array [13]
+.var SELECTED_FILE	= adr.SELECTED_FILE .word
+SELECTED_LIST	= DATAORIGIN+$0EA9
+READ_LIST	= DATAORIGIN+$0EAA
+BM	= DATAORIGIN+$0EAB
+adr.LIST_FILES	= [DATAORIGIN+$0EAC] .array [9] .word
+.var LIST_FILES	= adr.LIST_FILES .word
+adr.LIST_DRIVES	= CODEORIGIN+$059C
+.var LIST_DRIVES	= adr.LIST_DRIVES .word
+adr.BUTTONS	= CODEORIGIN+$05AC
+.var BUTTONS	= adr.BUTTONS .word
+
+@VarData	= WIN_FILE
+@VarDataSize	= 38
+
+	rts						; ret
+.endl
+
+.local	FORMINPUT					; FUNCTION
+
+; optimize OK (fullappdemo.pas), line = 124
+
+	lda #$00
+	sta RESULT
+
+; optimize OK (fullappdemo.pas), line = 125
+
+	lda #$01
+	sta BRA
+
+; optimize OK (fullappdemo.pas), line = 126
+
+	sta BRB
+
+; optimize OK (fullappdemo.pas), line = 127
+
+	lda #$02
+	sta BCHAP
+
+; optimize OK (fullappdemo.pas), line = 128
+
+	lda #$01
+	sta BCHBP
+
+; optimize OK (fullappdemo.pas), line = 129
+
+	lda #$02
+	sta BCHCP
+
+; optimize OK (fullappdemo.pas), line = 130
+
+	lda #$0A
+	sta BV
+	ldy #256-15
+	mva:rne CODEORIGIN+$015B+15-256,y adr.CF+15-256,y+
+
+; optimize OK (fullappdemo.pas), line = 134
+
+	lda #$1C
+	sta adr.CF+$05
+
+; optimize OK (fullappdemo.pas), line = 135
+
+	lda #$1D
+	sta adr.CF+$06
+
+; optimize OK (fullappdemo.pas), line = 136
+
+	lda #$1E
+	sta adr.CF+$07
+
+; optimize OK (fullappdemo.pas), line = 137
+
+	lda #$1F
+	sta adr.CF+$08
+
+; optimize OK (fullappdemo.pas), line = 138
+
+	lda #$7F
+	sta adr.CF+$09
+
+; optimize OK (fullappdemo.pas), line = 139
+
+	lda #$1B
+	sta adr.CF+$0A
+
+; optimize OK (fullappdemo.pas), line = 140
+
+	lda #$03
+	sta adr.CF+$0B
+	ldy #256-15
+	mva:rne CODEORIGIN+$016B+15-256,y adr.CI+15-256,y+
+
+; optimize OK (fullappdemo.pas), line = 143
+
+	lda #$1E
+	sta adr.CI+$05
+
+; optimize OK (fullappdemo.pas), line = 144
+
+	lda #$1F
+	sta adr.CI+$06
+
+; optimize OK (fullappdemo.pas), line = 145
+
+	lda #$1B
+	sta adr.CI+$07
+
+; optimize OK (fullappdemo.pas), line = 146
+
+	lda #$03
+	sta adr.CI+$08
+	ldy #256-15
+	mva:rne CODEORIGIN+$015B+15-256,y adr.CR+15-256,y+
+
+; optimize OK (fullappdemo.pas), line = 149
+
+	lda #$1C
+	sta adr.CR+$05
+
+; optimize OK (fullappdemo.pas), line = 150
+
+	lda #$1D
+	sta adr.CR+$06
+
+; optimize OK (fullappdemo.pas), line = 151
+
+	lda #$1E
+	sta adr.CR+$07
+
+; optimize OK (fullappdemo.pas), line = 152
+
+	lda #$1F
+	sta adr.CR+$08
+
+; optimize OK (fullappdemo.pas), line = 153
+
+	lda #$7F
+	sta adr.CR+$09
+
+; optimize OK (fullappdemo.pas), line = 154
+
+	lda #$1B
+	sta adr.CR+$0A
+
+; optimize OK (fullappdemo.pas), line = 155
+
+	lda #$03
+	sta adr.CR+$0C
+	ldy #256-15
+	mva:rne CODEORIGIN+$017B+15-256,y adr.CX+15-256,y+
+
+; optimize OK (fullappdemo.pas), line = 158
+
+	lda #$7F
+	sta adr.CX+$07
+
+; optimize OK (fullappdemo.pas), line = 159
+
+	lda #$1B
+	sta adr.CX+$08
+
+; optimize OK (fullappdemo.pas), line = 160
+
+	lda #$03
+	sta adr.CX+$09
+	ldy #256-41
+	mva:rne CODEORIGIN+$018B+41-256,y adr.CA+41-256,y+
+	ldy #256-41
+	mva:rne CODEORIGIN+$01B5+41-256,y adr.CB+41-256,y+
+	ldy #256-41
+	mva:rne CODEORIGIN+$01DF+41-256,y adr.CC+41-256,y+
+	ldy #256-41
+	mva:rne CODEORIGIN+$0209+41-256,y adr.CD+41-256,y+
+
+; optimize OK (fullappdemo.pas), line = 167
+
+	lda #$14
+	sta adr.CD+$01
+
+; optimize OK (fullappdemo.pas), line = 168
+
+	sta adr.CD+$17
+
+; optimize OK (fullappdemo.pas), line = 171
+
+	lda BRA
+	sta BRAP
+
+; optimize OK (fullappdemo.pas), line = 172
+
+	lda BRB
+	sta BRBP
+
+; optimize OK (fullappdemo.pas), line = 173
+
+	lda BV
+	sta BVP
+
+; optimize OK (fullappdemo.pas), line = 176
+
+	lda #$02
+	sta A8LIBWIN.WOPEN.X
+	lda #$03
+	sta A8LIBWIN.WOPEN.Y
+	lda #$24
+	sta A8LIBWIN.WOPEN.W
+	lda #$12
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW1
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 177
+
+	inx
+	mva #$33 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FB :STACKORIGIN,x
+	inx
+	mva #$F1 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 178
+
+	inx
+	mva #$3F :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FC :STACKORIGIN,x
+	inx
+	mva #$F1 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 179
+
+	inx
+	mva CF :STACKORIGIN,x
+	mva CF+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FB :STACKORIGIN,x
+	inx
+	mva #$F2 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 181
+
+	inx
+	mva #$45 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	sta :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 182
+
+	inx
+	mva #$52 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	sta :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 183
+
+	inx
+	mva #$5A :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$03 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 184
+
+	inx
+	mva #$62 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$04 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 185
+
+	inx
+	mva #$6A :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$05 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 186
+
+	inx
+	mva #$72 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$06 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 187
+
+	lda BW1
+	sta A8LIBGADG.GSPIN.BN
+	lda #$08
+	sta A8LIBGADG.GSPIN.X
+	lda #$06
+	sta A8LIBGADG.GSPIN.Y
+	lda #$00
+	sta A8LIBGADG.GSPIN.BL
+	lda #$64
+	sta A8LIBGADG.GSPIN.BM
+	lda BVP
+	sta A8LIBGADG.GSPIN.BI
+	lda #$00
+	sta A8LIBGADG.GSPIN.BE
+	jsr A8LIBGADG.GSPIN
+	mva A8LIBGADG.GSPIN.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 189
+
+	inx
+	mva #$7A :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$08 :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 190
+
+	lda BW1
+	sta A8LIBGADG.GRADIO.BN
+	lda #$02
+	sta A8LIBGADG.GRADIO.X
+	lda #$09
+	sta A8LIBGADG.GRADIO.Y
+	lda #$01
+	sta A8LIBGADG.GRADIO.BD
+	lda #$00
+	sta A8LIBGADG.GRADIO.BE
+	lda BRAP
+	sta A8LIBGADG.GRADIO.BI
+	lda #$03
+	sta A8LIBGADG.GRADIO.BS
+	lda #$B4
+	sta A8LIBGADG.GRADIO.PS
+	lda #$25
+	sta A8LIBGADG.GRADIO.PS+1
+	jsr A8LIBGADG.GRADIO
+	mva A8LIBGADG.GRADIO.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 192
+
+	inx
+	mva #$8D :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$0B :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 193
+
+	lda BW1
+	sta A8LIBGADG.GRADIO.BN
+	lda #$02
+	sta A8LIBGADG.GRADIO.X
+	lda #$0C
+	sta A8LIBGADG.GRADIO.Y
+	lda #$02
+	sta A8LIBGADG.GRADIO.BD
+	lda #$00
+	sta A8LIBGADG.GRADIO.BE
+	lda BRBP
+	sta A8LIBGADG.GRADIO.BI
+	lda #$03
+	sta A8LIBGADG.GRADIO.BS
+	lda #$BA
+	sta A8LIBGADG.GRADIO.PS
+	lda #$25
+	sta A8LIBGADG.GRADIO.PS+1
+	jsr A8LIBGADG.GRADIO
+	mva A8LIBGADG.GRADIO.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 195
+
+	inx
+	mva #$A0 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$0B :STACKORIGIN,x
+	inx
+	mva #$14 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 196
+
+	inx
+	mva #$AD :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$0C :STACKORIGIN,x
+	inx
+	mva #$19 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 197
+
+	inx
+	mva #$B3 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$0D :STACKORIGIN,x
+	inx
+	mva #$19 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 198
+
+	inx
+	mva #$BA :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$0E :STACKORIGIN,x
+	inx
+	mva #$19 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 199
+
+	lda BW1
+	sta A8LIBGADG.GCHECK.BN
+	lda #$15
+	sta A8LIBGADG.GCHECK.X
+	lda #$0C
+	sta A8LIBGADG.GCHECK.Y
+	lda #$00
+	sta A8LIBGADG.GCHECK.BI
+	lda BCHAP
+	sta A8LIBGADG.GCHECK.BD
+	jsr A8LIBGADG.GCHECK
+	mva A8LIBGADG.GCHECK.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 200
+
+	lda BW1
+	sta A8LIBGADG.GCHECK.BN
+	lda #$15
+	sta A8LIBGADG.GCHECK.X
+	lda #$0D
+	sta A8LIBGADG.GCHECK.Y
+	lda #$00
+	sta A8LIBGADG.GCHECK.BI
+	lda BCHBP
+	sta A8LIBGADG.GCHECK.BD
+	jsr A8LIBGADG.GCHECK
+	mva A8LIBGADG.GCHECK.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 201
+
+	lda BW1
+	sta A8LIBGADG.GCHECK.BN
+	lda #$15
+	sta A8LIBGADG.GCHECK.X
+	lda #$0E
+	sta A8LIBGADG.GCHECK.Y
+	lda #$00
+	sta A8LIBGADG.GCHECK.BI
+	lda BCHCP
+	sta A8LIBGADG.GCHECK.BD
+	jsr A8LIBGADG.GCHECK
+	mva A8LIBGADG.GCHECK.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 203
+
+	lda BW1
+	sta A8LIBGADG.GBUTTON.BN
+	lda #$15
+	sta A8LIBGADG.GBUTTON.X
+	lda #$10
+	sta A8LIBGADG.GBUTTON.Y
+	lda #$01
+	sta A8LIBGADG.GBUTTON.BO
+	lda #$00
+	sta A8LIBGADG.GBUTTON.BD
+	lda #$02
+	sta A8LIBGADG.GBUTTON.BS
+	lda #$B0
+	sta A8LIBGADG.GBUTTON.PA
+	lda #$25
+	sta A8LIBGADG.GBUTTON.PA+1
+	jsr A8LIBGADG.GBUTTON
+	mva A8LIBGADG.GBUTTON.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 206
+
+	inx
+	mva CA :STACKORIGIN,x
+	mva CA+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva #$08 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 207
+
+	inx
+	mva CB :STACKORIGIN,x
+	mva CB+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$03 :STACKORIGIN,x
+	inx
+	mva #$08 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 208
+
+	inx
+	mva CC :STACKORIGIN,x
+	mva CC+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$04 :STACKORIGIN,x
+	inx
+	mva #$08 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 209
+
+	inx
+	mva CD :STACKORIGIN,x
+	mva CD+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$05 :STACKORIGIN,x
+	inx
+	mva #$08 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; --- RepeatUntilProlog
+l_2B80
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 215
+
+	inx
+	mva CI :STACKORIGIN,x
+	mva CI+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FB :STACKORIGIN,x
+	inx
+	mva #$F2 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 218
+
+	lda BW1
+	sta A8LIBGADG.GINPUT.BN
+	lda #$08
+	sta A8LIBGADG.GINPUT.X
+	lda #$02
+	sta A8LIBGADG.GINPUT.Y
+	lda #$03
+	sta A8LIBGADG.GINPUT.BT
+	lda #$1B
+	sta A8LIBGADG.GINPUT.BS
+	lda CA
+	sta A8LIBGADG.GINPUT.PS
+	lda CA+1
+	sta A8LIBGADG.GINPUT.PS+1
+	jsr A8LIBGADG.GINPUT
+	lda A8LIBGADG.GINPUT.RESULT
+	sta BA
+
+; optimize OK (fullappdemo.pas), line = 219
+
+	lda BW1
+	sta A8LIBGADG.GINPUT.BN
+	lda #$08
+	sta A8LIBGADG.GINPUT.X
+	lda #$03
+	sta A8LIBGADG.GINPUT.Y
+	lda #$02
+	sta A8LIBGADG.GINPUT.BT
+	lda #$1B
+	sta A8LIBGADG.GINPUT.BS
+	lda CB
+	sta A8LIBGADG.GINPUT.PS
+	lda CB+1
+	sta A8LIBGADG.GINPUT.PS+1
+	jsr A8LIBGADG.GINPUT
+	lda A8LIBGADG.GINPUT.RESULT
+	sta BB
+
+; optimize OK (fullappdemo.pas), line = 220
+
+	lda BW1
+	sta A8LIBGADG.GINPUT.BN
+	lda #$08
+	sta A8LIBGADG.GINPUT.X
+	lda #$04
+	sta A8LIBGADG.GINPUT.Y
+	lda #$01
+	sta A8LIBGADG.GINPUT.BT
+	lda #$1B
+	sta A8LIBGADG.GINPUT.BS
+	lda CC
+	sta A8LIBGADG.GINPUT.PS
+	lda CC+1
+	sta A8LIBGADG.GINPUT.PS+1
+	jsr A8LIBGADG.GINPUT
+	lda A8LIBGADG.GINPUT.RESULT
+	sta BC
+
+; optimize OK (fullappdemo.pas), line = 221
+
+	lda BW1
+	sta A8LIBGADG.GINPUT.BN
+	lda #$08
+	sta A8LIBGADG.GINPUT.X
+	lda #$05
+	sta A8LIBGADG.GINPUT.Y
+	lda #$00
+	sta A8LIBGADG.GINPUT.BT
+	lda #$1B
+	sta A8LIBGADG.GINPUT.BS
+	lda CD
+	sta A8LIBGADG.GINPUT.PS
+	lda CD+1
+	sta A8LIBGADG.GINPUT.PS+1
+	jsr A8LIBGADG.GINPUT
+	lda A8LIBGADG.GINPUT.RESULT
+	sta BD
+
+; optimize OK (fullappdemo.pas), line = 224
+
+	lda BW1
+	sta A8LIBGADG.GSPIN.BN
+	lda #$08
+	sta A8LIBGADG.GSPIN.X
+	lda #$06
+	sta A8LIBGADG.GSPIN.Y
+	lda #$00
+	sta A8LIBGADG.GSPIN.BL
+	lda #$64
+	sta A8LIBGADG.GSPIN.BM
+	lda BVP
+	sta A8LIBGADG.GSPIN.BI
+	lda #$01
+	sta A8LIBGADG.GSPIN.BE
+	jsr A8LIBGADG.GSPIN
+	lda A8LIBGADG.GSPIN.RESULT
+	sta BV
+
+; optimize OK (fullappdemo.pas), line = 225
+
+	cmp #$FD
+	jeq l_2BDD
+
+; optimize OK (fullappdemo.pas), line = 227
+
+	sta BVP
+l_2BDD
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 232
+
+	inx
+	mva CR :STACKORIGIN,x
+	mva CR+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FB :STACKORIGIN,x
+	inx
+	mva #$F2 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 235
+
+	lda BW1
+	sta A8LIBGADG.GRADIO.BN
+	lda #$02
+	sta A8LIBGADG.GRADIO.X
+	lda #$09
+	sta A8LIBGADG.GRADIO.Y
+	lda #$01
+	sta A8LIBGADG.GRADIO.BD
+	sta A8LIBGADG.GRADIO.BE
+	lda BRAP
+	sta A8LIBGADG.GRADIO.BI
+	lda #$03
+	sta A8LIBGADG.GRADIO.BS
+	lda #$B4
+	sta A8LIBGADG.GRADIO.PS
+	lda #$25
+	sta A8LIBGADG.GRADIO.PS+1
+	jsr A8LIBGADG.GRADIO
+	lda A8LIBGADG.GRADIO.RESULT
+	sta BRA
+
+; optimize OK (fullappdemo.pas), line = 238
+
+	cmp #$FD
+	jeq l_2C10
+
+; optimize OK (fullappdemo.pas), line = 240
+
+	sta BRAP
+l_2C10
+
+; optimize OK (fullappdemo.pas), line = 244
+
+	lda BW1
+	sta A8LIBGADG.GRADIO.BN
+	lda #$02
+	sta A8LIBGADG.GRADIO.X
+	lda #$09
+	sta A8LIBGADG.GRADIO.Y
+	lda #$01
+	sta A8LIBGADG.GRADIO.BD
+	lda #$00
+	sta A8LIBGADG.GRADIO.BE
+	lda BRAP
+	sta A8LIBGADG.GRADIO.BI
+	lda #$03
+	sta A8LIBGADG.GRADIO.BS
+	lda #$B4
+	sta A8LIBGADG.GRADIO.PS
+	lda #$25
+	sta A8LIBGADG.GRADIO.PS+1
+	jsr A8LIBGADG.GRADIO
+	mva A8LIBGADG.GRADIO.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 247
+
+	lda BW1
+	sta A8LIBGADG.GRADIO.BN
+	lda #$02
+	sta A8LIBGADG.GRADIO.X
+	lda #$0C
+	sta A8LIBGADG.GRADIO.Y
+	lda #$02
+	sta A8LIBGADG.GRADIO.BD
+	lda #$01
+	sta A8LIBGADG.GRADIO.BE
+	lda BRBP
+	sta A8LIBGADG.GRADIO.BI
+	lda #$03
+	sta A8LIBGADG.GRADIO.BS
+	lda #$BA
+	sta A8LIBGADG.GRADIO.PS
+	lda #$25
+	sta A8LIBGADG.GRADIO.PS+1
+	jsr A8LIBGADG.GRADIO
+	lda A8LIBGADG.GRADIO.RESULT
+	sta BRB
+
+; optimize OK (fullappdemo.pas), line = 250
+
+	cmp #$FD
+	jeq l_2C48
+
+; optimize OK (fullappdemo.pas), line = 252
+
+	sta BRBP
+l_2C48
+
+; optimize OK (fullappdemo.pas), line = 256
+
+	lda BW1
+	sta A8LIBGADG.GRADIO.BN
+	lda #$02
+	sta A8LIBGADG.GRADIO.X
+	lda #$0C
+	sta A8LIBGADG.GRADIO.Y
+	lda #$02
+	sta A8LIBGADG.GRADIO.BD
+	lda #$00
+	sta A8LIBGADG.GRADIO.BE
+	lda BRBP
+	sta A8LIBGADG.GRADIO.BI
+	lda #$03
+	sta A8LIBGADG.GRADIO.BS
+	lda #$BA
+	sta A8LIBGADG.GRADIO.PS
+	lda #$25
+	sta A8LIBGADG.GRADIO.PS+1
+	jsr A8LIBGADG.GRADIO
+	mva A8LIBGADG.GRADIO.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 260
+
+	inx
+	mva CX :STACKORIGIN,x
+	mva CX+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FB :STACKORIGIN,x
+	inx
+	mva #$F2 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 265
+
+	lda BW1
+	sta A8LIBGADG.GCHECK.BN
+	lda #$15
+	sta A8LIBGADG.GCHECK.X
+	lda #$0C
+	sta A8LIBGADG.GCHECK.Y
+	lda #$01
+	sta A8LIBGADG.GCHECK.BI
+	lda BCHAP
+	sta A8LIBGADG.GCHECK.BD
+	jsr A8LIBGADG.GCHECK
+	lda A8LIBGADG.GCHECK.RESULT
+	sta BCHA
+
+; optimize OK (fullappdemo.pas), line = 268
+
+	cmp #$FD
+	jeq l_2C91
+	cmp #$FE
+	jeq l_2C91
+
+; optimize OK (fullappdemo.pas), line = 270
+
+	sta BCHAP
+l_2C91
+
+; optimize OK (fullappdemo.pas), line = 277
+
+	lda BW1
+	sta A8LIBGADG.GCHECK.BN
+	lda #$15
+	sta A8LIBGADG.GCHECK.X
+	lda #$0D
+	sta A8LIBGADG.GCHECK.Y
+	lda #$01
+	sta A8LIBGADG.GCHECK.BI
+	lda BCHBP
+	sta A8LIBGADG.GCHECK.BD
+	jsr A8LIBGADG.GCHECK
+	lda A8LIBGADG.GCHECK.RESULT
+	sta BCHB
+
+; optimize OK (fullappdemo.pas), line = 280
+
+	cmp #$FD
+	jeq l_2CB9
+
+; optimize OK (fullappdemo.pas), line = 282
+
+	sta BCHBP
+l_2CB9
+
+; optimize OK (fullappdemo.pas), line = 289
+
+	lda BW1
+	sta A8LIBGADG.GCHECK.BN
+	lda #$15
+	sta A8LIBGADG.GCHECK.X
+	lda #$0E
+	sta A8LIBGADG.GCHECK.Y
+	lda #$01
+	sta A8LIBGADG.GCHECK.BI
+	lda BCHCP
+	sta A8LIBGADG.GCHECK.BD
+	jsr A8LIBGADG.GCHECK
+	lda A8LIBGADG.GCHECK.RESULT
+	sta BCHC
+
+; optimize OK (fullappdemo.pas), line = 292
+
+	cmp #$FD
+	jeq l_2CE1
+
+; optimize OK (fullappdemo.pas), line = 294
+
+	sta BCHCP
+l_2CE1
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 299
+
+	inx
+	mva CF :STACKORIGIN,x
+	mva CF+1 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FB :STACKORIGIN,x
+	inx
+	mva #$F2 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 302
+
+	lda BW1
+	sta A8LIBGADG.GBUTTON.BN
+	lda #$15
+	sta A8LIBGADG.GBUTTON.X
+	lda #$10
+	sta A8LIBGADG.GBUTTON.Y
+	lda #$01
+	sta A8LIBGADG.GBUTTON.BO
+	sta A8LIBGADG.GBUTTON.BD
+	lda #$02
+	sta A8LIBGADG.GBUTTON.BS
+	lda #$B0
+	sta A8LIBGADG.GBUTTON.PA
+	lda #$25
+	sta A8LIBGADG.GBUTTON.PA+1
+	jsr A8LIBGADG.GBUTTON
+	lda A8LIBGADG.GBUTTON.RESULT
+	sta BM
+
+; optimize OK (fullappdemo.pas), line = 303
+
+	lda BW1
+	sta A8LIBGADG.GBUTTON.BN
+	lda #$15
+	sta A8LIBGADG.GBUTTON.X
+	lda #$10
+	sta A8LIBGADG.GBUTTON.Y
+	lda #$01
+	sta A8LIBGADG.GBUTTON.BO
+	lda #$00
+	sta A8LIBGADG.GBUTTON.BD
+	lda #$02
+	sta A8LIBGADG.GBUTTON.BS
+	lda #$B0
+	sta A8LIBGADG.GBUTTON.PA
+	lda #$25
+	sta A8LIBGADG.GBUTTON.PA+1
+	jsr A8LIBGADG.GBUTTON
+	mva A8LIBGADG.GBUTTON.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 304
+
+	lda BM
+	cmp #$FE
+	jeq l_2B80
+
+; optimize OK (fullappdemo.pas), line = 307
+
+	cmp #$01
+	jne l_2D28
+
+; optimize OK (fullappdemo.pas), line = 309
+
+	lda #$01
+	sta RESULT
+
+; optimize FAIL ('A8LIBGADG.GALERT', fullappdemo.pas), line = 310
+
+	inx
+	mva #$C2 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	jsr A8LIBGADG.GALERT
+l_2D28
+
+; optimize OK (fullappdemo.pas), line = 314
+
+	lda BW1
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+@exit
+
+; ------------------------------------------------------------
+
+RESULT	= DATAORIGIN+$17BE
+BRA	= DATAORIGIN+$17BF
+BRB	= DATAORIGIN+$17C0
+BCHAP	= DATAORIGIN+$17C1
+BCHBP	= DATAORIGIN+$17C2
+BCHCP	= DATAORIGIN+$17C3
+BV	= DATAORIGIN+$17C4
+BW1	= DATAORIGIN+$17C5
+BM	= DATAORIGIN+$17C6
+BA	= DATAORIGIN+$17C7
+BB	= DATAORIGIN+$17C8
+BC	= DATAORIGIN+$17C9
+BD	= DATAORIGIN+$17CA
+BVP	= DATAORIGIN+$17CB
+BRAP	= DATAORIGIN+$17CC
+BRBP	= DATAORIGIN+$17CD
+BCHA	= DATAORIGIN+$17CE
+BCHB	= DATAORIGIN+$17CF
+BCHC	= DATAORIGIN+$17D0
+adr.CA	= [DATAORIGIN+$17D1] .array [42]
+.var CA	= adr.CA .word
+adr.CB	= [DATAORIGIN+$17FB] .array [42]
+.var CB	= adr.CB .word
+adr.CC	= [DATAORIGIN+$1825] .array [42]
+.var CC	= adr.CC .word
+adr.CD	= [DATAORIGIN+$184F] .array [42]
+.var CD	= adr.CD .word
+adr.CF	= [DATAORIGIN+$1879] .array [16]
+.var CF	= adr.CF .word
+adr.CI	= [DATAORIGIN+$1889] .array [16]
+.var CI	= adr.CI .word
+adr.CR	= [DATAORIGIN+$1899] .array [16]
+.var CR	= adr.CR .word
+adr.CX	= [DATAORIGIN+$18A9] .array [16]
+.var CX	= adr.CX .word
+adr.PAB	= CODEORIGIN+$05B0
+.var PAB	= adr.PAB .word
+adr.PRA	= CODEORIGIN+$05B4
+.var PRA	= adr.PRA .word
+adr.PRB	= CODEORIGIN+$05BA
+.var PRB	= adr.PRB .word
+
+@VarData	= BRA
+@VarDataSize	= 250
+
+	rts						; ret
+.endl
+
+.local	PROGTEST					; PROCEDURE
+
+; optimize OK (fullappdemo.pas), line = 327
+
+	lda #$0A
+	sta A8LIBWIN.WOPEN.X
+	lda #$03
+	sta A8LIBWIN.WOPEN.Y
+	lda #$14
+	sta A8LIBWIN.WOPEN.W
+	lda #$0E
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW1
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 328
+
+	inx
+	mva #$E8 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FB :STACKORIGIN,x
+	inx
+	mva #$F1 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 329
+
+	inx
+	mva #$F0 :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	sta :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 330
+
+	inx
+	mva #$FF :STACKORIGIN,x
+	mva #$22 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 333
+
+	lda #$08
+	sta A8LIBWIN.WOPEN.X
+	lda #$11
+	sta A8LIBWIN.WOPEN.Y
+	lda #$18
+	sta A8LIBWIN.WOPEN.W
+	lda #$04
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW2
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 334
+
+	inx
+	mva #$0E :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva BW2 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 337
+
+	lda BW2
+	sta A8LIBGADG.GPROG.BN
+	lda #$02
+	sta A8LIBGADG.GPROG.X
+	sta A8LIBGADG.GPROG.Y
+	lda #$00
+	sta A8LIBGADG.GPROG.BS
+	jsr A8LIBGADG.GPROG
+
+; optimize OK (fullappdemo.pas), line = 340
+
+	lda #$00
+	sta BL
+
+l_2D7A
+; --- ForToDoCondition
+	lda BL
+	cmp #$0A
+	jcs l_2D88
+
+; optimize OK (fullappdemo.pas), line = 343
+
+	jsr A8LIBWIN.WSTAT
+	lda A8LIBWIN.WSTAT.RESULT
+	sta BS
+
+; optimize OK (fullappdemo.pas), line = 346
+
+	lda #$03
+	add BL
+	sta A8LIBWIN.WPOS.Y
+	lda BW1
+	sta A8LIBWIN.WPOS.BN
+	lda #$06
+	sta A8LIBWIN.WPOS.X
+	jsr A8LIBWIN.WPOS
+	mva A8LIBWIN.WPOS.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 347
+
+	lda BL
+	add #$30
+	sta A8LIBWIN.WPUT.X
+	lda BW1
+	sta A8LIBWIN.WPUT.BN
+	jsr A8LIBWIN.WPUT
+	mva A8LIBWIN.WPUT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 350
+
+	lda BS
+	cmp #$01
+	jne l_2DB8
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 352
+
+	inx
+	mva #$19 :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	lda #$03
+	add BL
+	sta :STACKORIGIN,x
+	inx
+	mva #$08 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+	jmp l_2DD0
+l_2DB8
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 355
+
+	inx
+	mva #$1F :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	lda #$03
+	add BL
+	sta :STACKORIGIN,x
+	inx
+	mva #$08 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+l_2DD0
+
+; optimize OK (fullappdemo.pas), line = 359
+
+	lda BL
+	add #$01
+	sta :eax
+	lda #$00
+	adc #$00
+	sta :eax+1
+	lda #$0A
+	sta :ecx
+	jsr idivAX_CL.MOD
+	lda :ztmp8
+	sta IV
+	lda #$00
+	sta IV+1
+	tay
+	lda IV
+	asl @
+	rol IV+1
+	asl @
+	rol IV+1
+	add IV
+	sta IV
+	tya
+	adc IV+1
+	asl IV
+	rol @
+	sta IV+1
+
+; optimize OK (fullappdemo.pas), line = 360
+
+	ora IV
+	jne l_2E06
+
+; optimize OK (fullappdemo.pas), line = 362
+
+	lda #$64
+	sta IV
+	lda #$00
+	sta IV+1
+l_2E06
+
+; optimize OK (fullappdemo.pas), line = 364
+
+	lda BW2
+	sta A8LIBGADG.GPROG.BN
+	lda #$02
+	sta A8LIBGADG.GPROG.X
+	sta A8LIBGADG.GPROG.Y
+	lda IV
+	sta A8LIBGADG.GPROG.BS
+	jsr A8LIBGADG.GPROG
+
+; optimize OK (fullappdemo.pas), line = 367
+
+	lda #$E8
+	sta CRT.DELAY.COUNT
+	lda #$03
+	sta CRT.DELAY.COUNT+1
+	jsr CRT.DELAY
+
+; --- ForToDoEpilog
+	inc BL
+	jne l_2D7A
+l_2D88
+
+; optimize OK (fullappdemo.pas), line = 369
+
+	lda BW1
+	jsr A8LIBWIN.WCLR
+	mva A8LIBWIN.WCLR.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBGADG.GALERT', fullappdemo.pas), line = 370
+
+	inx
+	mva #$25 :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	jsr A8LIBGADG.GALERT
+
+; optimize OK (fullappdemo.pas), line = 373
+
+	lda BW2
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 374
+
+	lda BW1
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+
+; ------------------------------------------------------------
+
+BW1	= DATAORIGIN+$18B9
+BW2	= DATAORIGIN+$18BA
+BL	= DATAORIGIN+$18BB
+BS	= DATAORIGIN+$18BC
+IV	= DATAORIGIN+$18BD
+
+@VarData	= BW1
+@VarDataSize	= 6
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	ABOUT						; PROCEDURE
+
+; optimize OK (fullappdemo.pas), line = 387
+
+	lda #$01
+	sta A8LIBWIN.WOPEN.X
+	lda #$05
+	sta A8LIBWIN.WOPEN.Y
+	lda #$26
+	sta A8LIBWIN.WOPEN.W
+	lda #$0F
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW1
+
+; optimize FAIL ('A8LIBWIN.WORN', fullappdemo.pas), line = 388
+
+	inx
+	mva #$41 :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$FB :STACKORIGIN,x
+	inx
+	mva #$F1 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WORN
+	mva A8LIBWIN.WORN.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 389
+
+	inx
+	mva #$48 :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 390
+
+	inx
+	mva #$5F :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 391
+
+	inx
+	mva #$71 :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$04 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 392
+
+	inx
+	mva #$90 :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$05 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 393
+
+	inx
+	mva #$A1 :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$07 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 394
+
+	inx
+	mva #$BD :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$08 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 395
+
+	inx
+	mva #$D5 :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$0A :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 396
+
+	inx
+	mva #$D7 :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$0B :STACKORIGIN,x
+	inx
+	mva #$02 :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 397
+
+	inx
+	mva #$FC :STACKORIGIN,x
+	mva #$23 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva #$0D :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW1 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 400
+
+	lda #$00
+	jsr A8LIBMISC.WAITKCX
+	inx
+	mva A8LIBMISC.WAITKCX.RESULT :STACKORIGIN,x
+	mva A8LIBMISC.WAITKCX.RESULT+1 :STACKORIGIN+STACKWIDTH,x
+	dex
+
+; optimize OK (fullappdemo.pas), line = 403
+
+	lda BW1
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+
+; ------------------------------------------------------------
+
+BW1	= DATAORIGIN+$18BF
+
+@VarData	= BW1
+@VarDataSize	= 1
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	SUBMENU						; PROCEDURE
+
+; optimize OK (fullappdemo.pas), line = 419
+
+	lda #$00
+	sta BD
+
+; optimize OK (fullappdemo.pas), line = 420
+
+	lda #$01
+	sta BC
+
+; optimize OK (fullappdemo.pas), line = 422
+
+	lda #$08
+	sta A8LIBWIN.WOPEN.X
+	lda #$03
+	sta A8LIBWIN.WOPEN.Y
+	lda #$0E
+	sta A8LIBWIN.WOPEN.W
+	lda #$05
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW1
+
+; --- WhileProlog
+	jmp l_2EA3
+l_2EA4
+
+; optimize OK (fullappdemo.pas), line = 428
+
+	lda BW1
+	sta A8LIBMENU.MENUV.BN
+	lda #$01
+	sta A8LIBMENU.MENUV.X
+	sta A8LIBMENU.MENUV.Y
+	lda #$00
+	sta A8LIBMENU.MENUV.BI
+	lda BC
+	sta A8LIBMENU.MENUV.BS
+	lda #$03
+	sta A8LIBMENU.MENUV.BC
+	lda #$C0
+	sta A8LIBMENU.MENUV.PS
+	lda #$25
+	sta A8LIBMENU.MENUV.PS+1
+	jsr A8LIBMENU.MENUV
+	lda A8LIBMENU.MENUV.RESULT
+	sta BC
+
+; optimize OK (fullappdemo.pas), line = 431
+
+	sta @CASETMP_0005
+	cmp #$01
+	jne l_2EBE
+@
+
+; optimize FAIL ('A8LIBGADG.GALERT', fullappdemo.pas), line = 432
+
+	inx
+	mva #$30 :STACKORIGIN,x
+	mva #$24 :STACKORIGIN+STACKWIDTH,x
+	jsr A8LIBGADG.GALERT
+	jmp a_0005
+l_2EBE
+	cmp #$02
+	jne l_2EC9
+@
+
+; optimize FAIL ('A8LIBGADG.GALERT', fullappdemo.pas), line = 433
+
+	inx
+	mva #$48 :STACKORIGIN,x
+	mva #$24 :STACKORIGIN+STACKWIDTH,x
+	jsr A8LIBGADG.GALERT
+	jmp a_0005
+l_2EC9
+	cmp #$03
+	jne l_2ED4
+@
+
+; optimize FAIL ('A8LIBGADG.GALERT', fullappdemo.pas), line = 434
+
+	inx
+	mva #$60 :STACKORIGIN,x
+	mva #$24 :STACKORIGIN+STACKWIDTH,x
+	jsr A8LIBGADG.GALERT
+	jmp a_0005
+l_2ED4
+	cmp #$FD
+	jne l_2EDF
+@
+
+; optimize OK (fullappdemo.pas), line = 435
+
+	lda #$01
+	sta BD
+
+l_2EDF
+a_0005
+l_2EA3
+
+; optimize OK (fullappdemo.pas), line = 425
+
+	lda BD
+	jeq l_2EA4
+
+; optimize OK (fullappdemo.pas), line = 440
+
+	lda BW1
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+
+; ------------------------------------------------------------
+
+BW1	= DATAORIGIN+$18C0
+BC	= DATAORIGIN+$18C1
+BD	= DATAORIGIN+$18C2
+adr.PCM	= CODEORIGIN+$05C0
+.var PCM	= adr.PCM .word
+@CASETMP_0005	= DATAORIGIN+$18C3
+
+@VarData	= BW1
+@VarDataSize	= 4
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+
+.local	MAINMENU					; PROCEDURE
+
+; optimize OK (fullappdemo.pas), line = 455
+
+	lda #$00
+	sta BD
+
+; optimize OK (fullappdemo.pas), line = 456
+
+	lda #$01
+	sta BC
+
+; optimize OK (fullappdemo.pas), line = 458
+
+	sta A8LIBWIN.WOPEN.X
+	lda #$03
+	sta A8LIBWIN.WOPEN.Y
+	lda #$0C
+	sta A8LIBWIN.WOPEN.W
+	lda #$06
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW1
+
+; --- WhileProlog
+	jmp l_2F0F
+l_2F10
+
+; optimize OK (fullappdemo.pas), line = 464
+
+	lda BW1
+	sta A8LIBMENU.MENUV.BN
+	lda #$01
+	sta A8LIBMENU.MENUV.X
+	sta A8LIBMENU.MENUV.Y
+	sta A8LIBMENU.MENUV.BI
+	lda BC
+	sta A8LIBMENU.MENUV.BS
+	lda #$04
+	sta A8LIBMENU.MENUV.BC
+	lda #$C6
+	sta A8LIBMENU.MENUV.PS
+	lda #$25
+	sta A8LIBMENU.MENUV.PS+1
+	jsr A8LIBMENU.MENUV
+	lda A8LIBMENU.MENUV.RESULT
+	sta BC
+
+; optimize OK (fullappdemo.pas), line = 467
+
+	sta @CASETMP_0006
+	cmp #$01
+	jne l_2F2A
+@
+
+; optimize FAIL ('FILEINPUT', fullappdemo.pas), line = 468
+
+	jsr FILEINPUT
+	inx
+	mva FILEINPUT.RESULT :STACKORIGIN,x
+	dex
+	jmp a_0006
+l_2F2A
+	cmp #$02
+	jne l_2F34
+@
+
+; optimize FAIL ('FORMINPUT', fullappdemo.pas), line = 469
+
+	jsr FORMINPUT
+	inx
+	mva FORMINPUT.RESULT :STACKORIGIN,x
+	dex
+	jmp a_0006
+l_2F34
+	cmp #$03
+	jne l_2F3E
+@
+
+; optimize FAIL ('A8LIBGADG.GCONFIRM', fullappdemo.pas), line = 470
+
+	inx
+	mva #$A8 :STACKORIGIN,x
+	mva #$24 :STACKORIGIN+STACKWIDTH,x
+	jsr A8LIBGADG.GCONFIRM
+	lda A8LIBGADG.GCONFIRM.RESULT
+	jeq l_2F49
+	jsr PROGTEST
+l_2F49
+	jmp a_0006
+l_2F3E
+	cmp #$04
+	jne l_2F56
+@
+
+; optimize OK (fullappdemo.pas), line = 472
+
+	lda #$01
+	sta BE
+
+; optimize OK (fullappdemo.pas), line = 473
+
+	sta BD
+
+	jmp a_0006
+l_2F56
+	cmp #$FD
+	jne l_2F67
+@
+
+; optimize OK (fullappdemo.pas), line = 475
+
+	lda #$01
+	sta BD
+
+l_2F67
+a_0006
+l_2F0F
+
+; optimize OK (fullappdemo.pas), line = 461
+
+	lda BD
+	jeq l_2F10
+
+; optimize OK (fullappdemo.pas), line = 480
+
+	lda BW1
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+
+; ------------------------------------------------------------
+
+BW1	= DATAORIGIN+$18C4
+BC	= DATAORIGIN+$18C5
+BD	= DATAORIGIN+$18C6
+adr.PCM	= CODEORIGIN+$05C6
+.var PCM	= adr.PCM .word
+@CASETMP_0006	= DATAORIGIN+$18C7
+
+@VarData	= BW1
+@VarDataSize	= 4
+
+@exit
+	.ifdef @new
+	lda <@VarData
+	sta :ztmp
+	lda >@VarData
+	ldy #@VarDataSize-1
+	jmp @FreeMem
+	els
+	rts						; ret
+	eif
+.endl
+l_04D9
+
+; optimize OK (fullappdemo.pas), line = 484
+
+	lda #$00
+	sta BE
+
+; optimize OK (fullappdemo.pas), line = 485
+
+	lda #$01
+	sta BC
+
+; optimize FAIL ('A8LIBWIN.WINIT', fullappdemo.pas), line = 487
+
+	jsr A8LIBWIN.WINIT
+
+; optimize OK (fullappdemo.pas), line = 488
+
+	lda #$0E
+	jsr A8LIBWIN.WBACK
+
+; optimize OK (fullappdemo.pas), line = 491
+
+	lda #$00
+	sta A8LIBWIN.WOPEN.X
+	sta A8LIBWIN.WOPEN.Y
+	lda #$28
+	sta A8LIBWIN.WOPEN.W
+	lda #$03
+	sta A8LIBWIN.WOPEN.H
+	lda #$00
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW1
+
+; optimize OK (fullappdemo.pas), line = 495
+
+	lda #$00
+	sta A8LIBWIN.WOPEN.X
+	lda #$15
+	sta A8LIBWIN.WOPEN.Y
+	lda #$28
+	sta A8LIBWIN.WOPEN.W
+	lda #$03
+	sta A8LIBWIN.WOPEN.H
+	lda #$01
+	sta A8LIBWIN.WOPEN.BT
+	jsr A8LIBWIN.WOPEN
+	lda A8LIBWIN.WOPEN.RESULT
+	sta BW2
+
+; optimize FAIL ('A8LIBWIN.WPRINT', fullappdemo.pas), line = 496
+
+	inx
+	mva #$B7 :STACKORIGIN,x
+	mva #$24 :STACKORIGIN+STACKWIDTH,x
+	inx
+	mva #$00 :STACKORIGIN,x
+	inx
+	mva #$01 :STACKORIGIN,x
+	inx
+	mva #$FF :STACKORIGIN,x
+	inx
+	mva BW2 :STACKORIGIN,x
+	jsr A8LIBWIN.WPRINT
+	mva A8LIBWIN.WPRINT.RESULT :STACKORIGIN+1,x
+
+; --- WhileProlog
+	jmp l_2FA9
+l_2FAA
+
+; optimize OK (fullappdemo.pas), line = 502
+
+	lda BW1
+	sta A8LIBMENU.MENUH.BN
+	lda #$01
+	sta A8LIBMENU.MENUH.X
+	sta A8LIBMENU.MENUH.Y
+	sta A8LIBMENU.MENUH.BI
+	lda BC
+	sta A8LIBMENU.MENUH.BS
+	lda #$03
+	sta A8LIBMENU.MENUH.BC
+	lda #$96
+	sta A8LIBMENU.MENUH.PS
+	lda #$25
+	sta A8LIBMENU.MENUH.PS+1
+	jsr A8LIBMENU.MENUH
+	lda A8LIBMENU.MENUH.RESULT
+	sta BC
+
+; optimize OK (fullappdemo.pas), line = 505
+
+	sta @CASETMP_0007
+	cmp #$01
+	jne l_2FC4
+@
+
+; optimize FAIL ('MAINMENU', fullappdemo.pas), line = 506
+
+	jsr MAINMENU
+	jmp a_0007
+l_2FC4
+	cmp #$02
+	jne l_2FCE
+@
+
+; optimize FAIL ('SUBMENU', fullappdemo.pas), line = 507
+
+	jsr SUBMENU
+	jmp a_0007
+l_2FCE
+	cmp #$03
+	jne l_2FD8
+@
+
+; optimize FAIL ('ABOUT', fullappdemo.pas), line = 508
+
+	jsr ABOUT
+l_2FD8
+a_0007
+
+; optimize OK (fullappdemo.pas), line = 512
+
+	lda BC
+	cmp #$FD
+	jne l_2FF2
+
+; optimize OK (fullappdemo.pas), line = 514
+
+	lda #$01
+	sta BE
+l_2FF2
+l_2FA9
+
+; optimize OK (fullappdemo.pas), line = 499
+
+	lda BE
+	jeq l_2FAA
+
+; optimize OK (fullappdemo.pas), line = 519
+
+	lda BW2
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+
+; optimize OK (fullappdemo.pas), line = 520
+
+	lda BW1
+	jsr A8LIBWIN.WCLOSE
+	mva A8LIBWIN.WCLOSE.RESULT :STACKORIGIN+1,x
+
+; ------------------------------------------------------------
+
+BW1	= DATAORIGIN+$0E93
+BW2	= DATAORIGIN+$0E94
+BC	= DATAORIGIN+$0E95
+BE	= DATAORIGIN+$0E96
+adr.PCM	= CODEORIGIN+$0596
+.var PCM	= adr.PCM .word
+@CASETMP_0007	= DATAORIGIN+$18C8
+@exit
+
+@halt	ldx #$00
+	txs
+	.ifdef MAIN.@DEFINES.ROMOFF
+	inc portb
+	.fi
+
+	ldy #$01
+
+	rts
+
+; ------------------------------------------------------------
+
+IOCB@COPY	:16 brk
+
+; ------------------------------------------------------------
+
+.local	@DEFINES
+ATARI
+.endl
+
+.local	@RESOURCE
+.endl
+
+.endl							; MAIN
+
+; ------------------------------------------------------------
+; ------------------------------------------------------------
+
+.macro	UNITINITIALIZATION
+
+	.ifdef MAIN.SYSTEM.@UnitInit
+	jsr MAIN.SYSTEM.@UnitInit
+	.fi
+
+	.ifdef MAIN.ATARI.@UnitInit
+	jsr MAIN.ATARI.@UnitInit
+	.fi
+
+	.ifdef MAIN.CRT.@UnitInit
+	jsr MAIN.CRT.@UnitInit
+	.fi
+
+	.ifdef MAIN.A8DEFINES.@UnitInit
+	jsr MAIN.A8DEFINES.@UnitInit
+	.fi
+
+	.ifdef MAIN.A8DEFWIN.@UnitInit
+	jsr MAIN.A8DEFWIN.@UnitInit
+	.fi
+
+	.ifdef MAIN.A8LIBMISC.@UnitInit
+	jsr MAIN.A8LIBMISC.@UnitInit
+	.fi
+
+	.ifdef MAIN.A8LIBSTR.@UnitInit
+	jsr MAIN.A8LIBSTR.@UnitInit
+	.fi
+
+	.ifdef MAIN.DOS.@UnitInit
+	jsr MAIN.DOS.@UnitInit
+	.fi
+
+	.ifdef MAIN.STRUTILS.@UnitInit
+	jsr MAIN.STRUTILS.@UnitInit
+	.fi
+
+	.ifdef MAIN.SYSUTILS.@UnitInit
+	jsr MAIN.SYSUTILS.@UnitInit
+	.fi
+
+	.ifdef MAIN.A8LIBWIN.@UnitInit
+	jsr MAIN.A8LIBWIN.@UnitInit
+	.fi
+
+	.ifdef MAIN.A8LIBMENU.@UnitInit
+	jsr MAIN.A8LIBMENU.@UnitInit
+	.fi
+
+	.ifdef MAIN.A8LIBGADG.@UnitInit
+	jsr MAIN.A8LIBGADG.@UnitInit
+	.fi
+.endm
+
+; ------------------------------------------------------------
+
+	ift .SIZEOF(MAIN.SYSTEM) > 0
+	.print 'SYSTEM: ',MAIN.SYSTEM,'..',MAIN.SYSTEM+.SIZEOF(MAIN.SYSTEM)-1
+	eif
+
+	ift .SIZEOF(MAIN.ATARI) > 0
+	.print 'ATARI: ',MAIN.ATARI,'..',MAIN.ATARI+.SIZEOF(MAIN.ATARI)-1
+	eif
+
+	ift .SIZEOF(MAIN.CRT) > 0
+	.print 'CRT: ',MAIN.CRT,'..',MAIN.CRT+.SIZEOF(MAIN.CRT)-1
+	eif
+
+	ift .SIZEOF(MAIN.A8DEFINES) > 0
+	.print 'A8DEFINES: ',MAIN.A8DEFINES,'..',MAIN.A8DEFINES+.SIZEOF(MAIN.A8DEFINES)-1
+	eif
+
+	ift .SIZEOF(MAIN.A8DEFWIN) > 0
+	.print 'A8DEFWIN: ',MAIN.A8DEFWIN,'..',MAIN.A8DEFWIN+.SIZEOF(MAIN.A8DEFWIN)-1
+	eif
+
+	ift .SIZEOF(MAIN.A8LIBMISC) > 0
+	.print 'A8LIBMISC: ',MAIN.A8LIBMISC,'..',MAIN.A8LIBMISC+.SIZEOF(MAIN.A8LIBMISC)-1
+	eif
+
+	ift .SIZEOF(MAIN.A8LIBSTR) > 0
+	.print 'A8LIBSTR: ',MAIN.A8LIBSTR,'..',MAIN.A8LIBSTR+.SIZEOF(MAIN.A8LIBSTR)-1
+	eif
+
+	ift .SIZEOF(MAIN.DOS) > 0
+	.print 'DOS: ',MAIN.DOS,'..',MAIN.DOS+.SIZEOF(MAIN.DOS)-1
+	eif
+
+	ift .SIZEOF(MAIN.STRUTILS) > 0
+	.print 'STRUTILS: ',MAIN.STRUTILS,'..',MAIN.STRUTILS+.SIZEOF(MAIN.STRUTILS)-1
+	eif
+
+	ift .SIZEOF(MAIN.SYSUTILS) > 0
+	.print 'SYSUTILS: ',MAIN.SYSUTILS,'..',MAIN.SYSUTILS+.SIZEOF(MAIN.SYSUTILS)-1
+	eif
+
+	ift .SIZEOF(MAIN.A8LIBWIN) > 0
+	.print 'A8LIBWIN: ',MAIN.A8LIBWIN,'..',MAIN.A8LIBWIN+.SIZEOF(MAIN.A8LIBWIN)-1
+	eif
+
+	ift .SIZEOF(MAIN.A8LIBMENU) > 0
+	.print 'A8LIBMENU: ',MAIN.A8LIBMENU,'..',MAIN.A8LIBMENU+.SIZEOF(MAIN.A8LIBMENU)-1
+	eif
+
+	ift .SIZEOF(MAIN.A8LIBGADG) > 0
+	.print 'A8LIBGADG: ',MAIN.A8LIBGADG,'..',MAIN.A8LIBGADG+.SIZEOF(MAIN.A8LIBGADG)-1
+	eif
+
+	.print 'CODE: ',CODEORIGIN,'..',MAIN.@RESOURCE-1
+
+; ------------------------------------------------------------
+
+	.align $0004
+
+DATAORIGIN
+.by  $28 $00 $18 $00 $2D $0C $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $65 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $65 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $00 $00 $00 $00
+.by  $00 $00 $00 $00 $00 $00 $00 $00  $00 $00 $00 $00 $60 $20 $64 $20  $6E $20 $79 $20 $84 $20 $8E $20
+.by  $9C $20 $AA $20 $B8 $20
+
+VARINITSIZE	= *-DATAORIGIN
+VARDATASIZE	= 6345
+
+PROGRAMSTACK	= DATAORIGIN+VARDATASIZE
+
+	.print 'DATA: ',DATAORIGIN,'..',PROGRAMSTACK
+
+	run START
+
+; ------------------------------------------------------------
+
+.macro	STATICDATA
+.by  $05 $31 $2E $31 $2E $30 $00 $03  $20 $20 $20 $00 $04 $54 $52 $55  $45 $00 $05 $46 $41 $4C $53 $45
+.by  $00 $06 $41 $6C $65 $72 $74 $21  $00 $08 $5B $20 $20 $4F $4B $20  $20 $5D $00 $08 $5B $43 $61 $6E
+.by  $63 $65 $6C $5D $00 $07 $43 $6F  $6E $66 $69 $72 $6D $00 $03 $5B  $20 $5D $00 $06 $20 $4D $61 $69
+.by  $6E $20 $00 $0A $20 $53 $75 $62  $2D $4D $65 $6E $75 $20 $00 $07  $20 $41 $62 $6F $75 $74 $20 $00
+.by  $02 $2E $2E $00 $08 $46 $49 $4C  $45 $2E $58 $45 $58 $00 $09 $46  $49 $4C $45 $32 $2E $54 $58 $54
+.by  $00 $09 $46 $49 $4C $45 $33 $2E  $44 $41 $54 $00 $08 $43 $4F $52  $45 $2E $42 $49 $4E $00 $0C $46
+.by  $49 $4C $45 $35 $35 $35 $35 $2E  $42 $49 $4E $00 $0C $46 $49 $4C  $45 $36 $36 $36 $36 $2E $42 $49
+.by  $4E $00 $0C $46 $49 $4C $45 $37  $37 $37 $37 $2E $42 $49 $4E $00  $09 $46 $49 $4C $45 $38 $2E $42
+.by  $49 $4E $00 $03 $44 $31 $3A $00  $03 $44 $32 $3A $00 $03 $44 $33  $3A $00 $03 $44 $34 $3A $00 $03
+.by  $44 $35 $3A $00 $03 $44 $36 $3A  $00 $03 $44 $37 $3A $00 $03 $44  $38 $3A $00 $0C $20 $20 $20 $20
+.by  $20 $20 $20 $20 $20 $20 $20 $20  $00 $0B $43 $68 $6F $6F $73 $65  $20 $66 $69 $6C $65 $00 $05 $46
+.by  $69 $6C $65 $3A $00 $06 $44 $72  $69 $76 $65 $3A $00 $0D $50 $72  $6F $63 $65 $73 $73 $69 $6E $67
+.by  $2E $2E $2E $00 $06 $5B $20 $4F  $6B $20 $5D $00 $03 $4F $6E $65  $00 $03 $54 $77 $6F $00 $05 $54
+.by  $68 $72 $65 $65 $00 $08 $43 $68  $6F $69 $63 $65 $20 $41 $00 $08  $43 $68 $6F $69 $63 $65 $20 $42
+.by  $00 $08 $43 $68 $6F $69 $63 $65  $20 $43 $00 $0E $4E $61 $76 $3A  $20 $20 $20 $20 $20 $20 $20 $20
+.by  $20 $20 $00 $0E $4E $61 $76 $3A  $20 $20 $20 $20 $5E $63 $53 $5E  $63 $45 $00 $0E $4E $61 $76 $3A
+.by  $58 $20 $20 $20 $20 $20 $20 $20  $20 $20 $00 $28 $2D $31 $30 $30  $2E $30 $30 $20 $20 $20 $20 $20
+.by  $20 $20 $20 $20 $20 $20 $20 $20  $20 $20 $20 $20 $20 $20 $20 $20  $20 $20 $20 $20 $20 $20 $20 $20
+.by  $20 $20 $20 $20 $00 $28 $54 $68  $69 $73 $20 $73 $74 $72 $69 $6E  $67 $20 $68 $61 $73 $20 $73 $6F
+.by  $6D $65 $74 $68 $69 $6E $67 $20  $74 $6F $20 $65 $64 $69 $74 $20  $69 $6E $20 $69 $74 $21 $00 $28
+.by  $20 $20 $20 $20 $20 $20 $20 $20  $20 $20 $20 $20 $20 $20 $20 $20  $20 $20 $20 $20 $20 $20 $20 $20
+.by  $20 $20 $20 $20 $20 $20 $20 $20  $20 $20 $20 $20 $20 $20 $20 $20  $00 $28 $20 $41 $6E $79 $20 $63
+.by  $68 $61 $72 $61 $63 $74 $65 $72  $20 $73 $74 $72 $69 $6E $67 $21  $20 $20 $20 $20 $20 $20 $20 $20
+.by  $20 $20 $20 $20 $20 $20 $20 $20  $20 $20 $00 $0A $49 $6E $70 $75  $74 $20 $46 $6F $72 $6D $00 $04
+.by  $45 $64 $69 $74 $00 $0B $44 $61  $74 $61 $20 $46 $69 $65 $6C $64  $73 $00 $06 $4E $75 $6D $65 $72
+.by  $3A $00 $06 $41 $6C $70 $68 $61  $3A $00 $06 $41 $6C $4E $75 $6D  $3A $00 $06 $41 $6E $79 $2E $2E
+.by  $3A $00 $06 $53 $70 $69 $6E $2E  $3A $00 $11 $52 $61 $64 $69 $6F  $20 $42 $75 $74 $74 $6F $6E $73
+.by  $20 $28 $68 $29 $00 $11 $52 $61  $64 $69 $6F $20 $42 $75 $74 $74  $6F $6E $73 $20 $28 $76 $29 $00
+.by  $0B $43 $68 $65 $63 $6B $20 $42  $6F $78 $65 $73 $00 $04 $4D $69  $6C $6B $00 $05 $42 $72 $65 $61
+.by  $64 $00 $06 $42 $75 $74 $74 $65  $72 $00 $24 $44 $6F $69 $6E $67  $20 $73 $6F $6D $65 $74 $68 $69
+.by  $6E $67 $20 $77 $69 $74 $68 $20  $65 $6E $74 $65 $72 $65 $64 $20  $64 $61 $74 $61 $2E $2E $2E $00
+.by  $06 $53 $74 $61 $74 $75 $73 $00  $0D $57 $69 $6E $64 $6F $77 $20  $53 $74 $61 $74 $75 $73 $00 $0D
+.by  $2D $2D $2D $2D $2D $2D $20 $2D  $2D $2D $2D $2D $2D $00 $09 $50  $72 $6F $67 $72 $65 $73 $73 $3A
+.by  $00 $04 $55 $73 $65 $64 $00 $04  $46 $72 $65 $65 $00 $1A $20 $50  $72 $65 $73 $73 $20 $61 $20 $6B
+.by  $65 $79 $20 $74 $6F $20 $63 $6F  $6E $74 $69 $6E $75 $65 $2E $20  $00 $05 $41 $62 $6F $75 $74 $00
+.by  $15 $46 $75 $6C $6C $20 $41 $70  $70 $6C $69 $63 $61 $74 $69 $6F  $6E $20 $44 $65 $6D $6F $00 $10
+.by  $56 $65 $72 $73 $69 $6F $6E $20  $31 $2E $31 $30 $2D $50 $41 $53  $00 $1D $28 $43 $29 $20 $32 $30
+.by  $32 $32 $2D $32 $30 $32 $33 $20  $57 $61 $64 $65 $20 $52 $69 $70  $6B $6F $77 $73 $6B $69 $2C $00
+.by  $0F $61 $6D $61 $72 $6F $6B $2C  $20 $4D $41 $44 $52 $41 $46 $69  $00 $1A $41 $70 $70 $6C $69 $63
+.by  $61 $74 $69 $6F $6E $20 $74 $6F  $20 $64 $65 $6D $6F $6E $73 $74  $72 $61 $74 $65 $00 $16 $74 $68
+.by  $65 $20 $4D $61 $64 $50 $61 $73  $63 $61 $6C $20 $6C $69 $62 $72  $61 $72 $79 $2E $00 $00 $00 $23
+.by  $56 $31 $2D $50 $41 $53 $2D $32  $30 $32 $33 $2D $41 $74 $61 $72  $69 $38 $3A $20 $50 $41 $53 $20
+.by  $28 $4D $61 $64 $50 $61 $73 $63  $61 $6C $29 $00 $08 $5B $20 $20  $4F $6B $20 $20 $5D $00 $0C $20
+.by  $53 $75 $62 $2D $49 $74 $65 $6D  $20 $31 $20 $00 $0C $20 $53 $75  $62 $2D $49 $74 $65 $6D $20 $32
+.by  $20 $00 $0C $20 $53 $75 $62 $2D  $49 $74 $65 $6D $20 $33 $20 $00  $16 $20 $53 $75 $62 $2D $49 $74
+.by  $65 $6D $20 $31 $20 $73 $65 $6C  $65 $63 $74 $65 $64 $2E $20 $00  $16 $20 $53 $75 $62 $2D $49 $74
+.by  $65 $6D $20 $32 $20 $73 $65 $6C  $65 $63 $74 $65 $64 $2E $20 $00  $16 $20 $53 $75 $62 $2D $49 $74
+.by  $65 $6D $20 $33 $20 $73 $65 $6C  $65 $63 $74 $65 $64 $2E $20 $00  $0A $20 $46 $69 $6C $65 $20 $20
+.by  $20 $20 $20 $00 $0A $20 $49 $6E  $70 $75 $74 $20 $20 $20 $20 $00  $0A $20 $50 $72 $6F $67 $72 $65
+.by  $73 $73 $20 $00 $0A $20 $45 $78  $69 $74 $20 $20 $20 $20 $20 $00  $0D $41 $72 $65 $20 $79 $6F $75
+.by  $20 $73 $75 $72 $65 $3F $00 $19  $44 $20 $45 $20 $4D $20 $4F $20  $4E $20 $53 $20 $54 $20 $52 $20
+.by  $41 $20 $54 $20 $49 $20 $4F $20  $4E $00 $6C $6A $3B $C7 $C7 $6B  $2B $2A $6F $C7 $70 $75 $9B $69
+.by  $2D $3D $76 $C7 $63 $C7 $C7 $62  $78 $7A $34 $C7 $33 $36 $C7 $35  $32 $31 $2C $20 $2E $6E $C7 $6D
+.by  $2F $C7 $72 $C7 $65 $79 $C7 $74  $77 $71 $39 $C7 $30 $37 $C7 $38  $3C $3E $66 $68 $64 $C7 $C7 $67
+.by  $73 $61 $4C $4A $3A $C7 $C7 $4B  $5C $5E $4F $C7 $50 $55 $C7 $49  $5F $7C $56 $C7 $43 $C7 $C7 $42
+.by  $58 $5A $24 $C7 $23 $26 $C7 $25  $22 $21 $5B $20 $5D $4E $C7 $4D  $3F $C7 $52 $C7 $45 $59 $C7 $54
+.by  $57 $51 $28 $C7 $29 $27 $C7 $40  $C7 $C7 $46 $48 $44 $C7 $C7 $47  $53 $41 $0C $0A $7B $C7 $C7 $0B
+.by  $C7 $C7 $0F $C7 $10 $15 $C7 $09  $C7 $C7 $16 $C7 $03 $C7 $C7 $02  $18 $1A $C7 $C7 $C7 $C7 $C7 $C7
+.by  $C7 $C7 $C7 $C7 $60 $0E $C7 $0D  $C7 $C7 $12 $C7 $05 $19 $C7 $14  $17 $11 $C7 $C7 $C7 $C7 $C7 $C7
+.by  $C7 $C7 $06 $08 $04 $C7 $C7 $07  $13 $01 $21 $20 $2B $20 $43 $20  $4B $20 $57 $20 $C3 $20 $C8 $20
+.by  $CD $20 $D2 $20 $D7 $20 $DC $20  $E1 $20 $E6 $20 $21 $20 $2B $20  $24 $21 $2B $20 $2C $21 $31 $21
+.by  $36 $21 $3D $21 $47 $21 $51 $21  $06 $24 $14 $24 $22 $24 $78 $24  $84 $24 $90 $24 $9C $24
+.endm
+
+	end
