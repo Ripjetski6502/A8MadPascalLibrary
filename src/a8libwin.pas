@@ -9,6 +9,8 @@
 //          -Type byte is synonymous with unsigned char (a8defines.pas)
 // Depends: a8libstr.pas
 // Revised:
+// - Added WDiv function
+// - Added WClr function
 // --------------------------------------------------
 unit a8libwin;
 

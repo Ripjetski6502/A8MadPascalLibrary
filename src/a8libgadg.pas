@@ -13,6 +13,8 @@
 // Revised:
 // - Added orientation parameter to function GButton 
 // - Added GCombo gadget
+// - Added GList gadget
+// - Added GConfirm gadget
 // --------------------------------------------------
 
 unit a8libgadg;
@@ -465,7 +467,6 @@ var
     tmp, size: Byte;
     line: String[40];
 
-
 begin
     bF := false;
 
@@ -509,8 +510,6 @@ begin
             Inc(yp);
         end;
         
-
-
         // If initial item is display only, set exit flag
         if bE = GDISP then
         begin
@@ -558,7 +557,7 @@ begin
 end;
 
 // ------------------------------------------------------------
-// Func...: GCombo(bN, x, y, bD, bE, bI, bS: Byte; pS: TStringArray): Byte;
+// Func...: GCombo(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
 // Desc...: Display list and get choice
 // Param..: bN = Window handle number
 //           x = Column of window to place list
