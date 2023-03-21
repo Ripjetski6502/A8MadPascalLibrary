@@ -51,8 +51,8 @@ function MenuV(bN, x, y, bI, bS, bC: Byte; pS: TStringArray): Byte;
 var
     bF: Boolean;
     bL, bK, tmp: Byte;
-    cL: string[39];
-    tmpStr: string;
+    cL: string[39]; // 40 - 1
+    tmpStr: string[39];
 begin
     bF := false;
 
@@ -156,7 +156,7 @@ var
     bF: Boolean;
     bL, bK, tmp, l, pos: Byte;
     cL: string[39];
-    tmpStr: string;
+    tmpStr: string[39];  //40 - 1 
 begin
     bF := false;
     // Set default return to start item #

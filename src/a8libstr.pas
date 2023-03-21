@@ -27,7 +27,7 @@ uses
 procedure StrInv(pS: PByte; bS: Byte);
 procedure StrAI(pS: PByte; bS: Byte);
 function CharAI(bC: Byte): Byte;
-function ByteToStr3(bN: Byte): string;
+function ByteToStr3(bN: Byte): string[3];
 
 implementation
 
@@ -119,11 +119,11 @@ end;
 
 
 // ------------------------------------------------------------
-// Func...: ByteToStr3(bN: Byte): string;
+// Func...: ByteToStr3(bN: Byte): string[3];
 // Desc...: Converts byte number into string like %3d
 // Param..: bN = number to convert
 // ------------------------------------------------------------
-function ByteToStr3(bN: Byte): string;
+function ByteToStr3(bN: Byte): string[3];
 begin
     Result := '   ';
     Result[3] := Char(Byte('0') + bN mod 10);

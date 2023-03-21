@@ -16,6 +16,7 @@ uses
 var
     bW1, bW2, bC: Byte;
     bE: Boolean;
+
 const
     pcM: array[0..2] of string =
       (' Main ', ' Sub-Menu ', ' About ');
@@ -27,51 +28,72 @@ const
 // Returns: TRUE if accepted, else FALSE
 // ------------------------------------------------------------
 function FileInput: Boolean;
-var
-    win_file, win_list, win_drive: Byte;
-    selected, selected_drive: Byte;
-    bM: Byte;
+
 const
-    menu_drives: array[0..7] of string = ('D1:', 'D2:', 'D3:', 'D4:', 'D5:', 'D6:', 'D7:', 'D8:');
+    list_drives: array[0..7] of string = ('D1:', 'D2:', 'D3:', 'D4:', 'D5:', 'D6:', 'D7:', 'D8:');
     buttons : array[0..1] of string = ('[  OK  ]', '[Cancel]');
+    list_files: array[0..9] of string = ('FILE.XEX', 'FILE2.TXT', 'FILE3.DAT', 'CORE.BIN', 'FILE555.BIN', 'FILE6.BIN', 'FILE77.BIN', 'FILE8.BIN', 'FILE999.BIN', 'FILE101010.BIN');
+    FILE_SIZE = 12;
+
+var
+    win_file: Byte;
+    read_drive, selected_drive: Byte;
+    read_file: Byte;
+    selected_file: String[FILE_SIZE];
+    selected_list: Byte;
+    read_list: Byte;
+    bM: Byte;
+    tmp: Byte;    
 
 begin
     Result:= false;
     selected_drive:=1;
-
+    selected_list:=1;
+    // selected_file:='            ';
+    selected_file:= list_files[selected_list - 1];
+    tmp:= Length(selected_file);
+    SetLength(selected_file, FILE_SIZE);
+    FillChar(@selected_file[tmp + 1], FILE_SIZE - tmp, CHSPACE );
+    
     win_file:=WOpen(5, 4, 30, 16, WOFF);
     WOrn(win_file, WPTOP, WPLFT, 'Choose file');
 
 
-    // WPrint(win_file, 1, 8, WOFF, 'Radio Buttons (v)');
-    // GRadio(win_file, 1, 1, GVERT, GDISP, 1, 8, menu_drives);
+    WPrint(win_file, 2, 2, WOFF, 'File:');
+    WDiv(win_file, 3, WON);
 
-
-    WPrint(win_file, 15, 2, WOFF, 'Drive');
-    // GCombo(win_file, 15, 3, GDISP, 0, 4, menu_drives);
+    WPrint(win_file, 21, 4, WOFF, 'Drive:');
+    GCombo(win_file, 21, 5, GDISP, selected_drive, 8, list_drives);
     
-
-
-    // selected:=MenuV(win_drive, 1, 1, WOFF, 1, 1, menu_drives);
-    // win_list:=WOpen(7, 5, 14, 10, WOFF);
-    // WOrn(win_list, WPTOP, WPLFT, 'List');
-
-    // WPrint(win_list, 1, 1, WOFF, 'FILE.XEX');
-    // WPrint(win_list, 1, 2, WOFF, 'FILE2.TXT');
-    // WPrint(win_list, 1, 3, WOFF, 'FILE3.DAT');
+    WPrint(win_file, 2, 4, WOFF, 'List:');
+    GList(win_file, 2, 5, GDISP, selected_list, 8, Length(list_files), list_files);
 
     GButton(win_file, 19, 11, GVERT, GDISP, 2, buttons);
-    // WaitKCX(WOFF);
     repeat
 
-        // Drives combo
-        selected:= GCombo(win_file, 15, 3, GEDIT, selected_drive, 8, menu_drives);
-        if (selected <> XESC) and (selected <> XTAB) then
-        begin
-            selected_drive := selected;
-        end;
-        GCombo(win_file, 15, 3, GDISP, selected_drive, 8, menu_drives);
+        // file
+        read_file:= GInput(win_file, 8, 2, GFILE, 12, selected_file);
 
+        // Drives combo
+        read_drive:= GCombo(win_file, 21, 5, GEDIT, selected_drive, 8, list_drives);
+        if (read_drive <> XESC) then
+        begin
+            selected_drive := read_drive;
+        end;
+        GCombo(win_file, 21, 5, GDISP, selected_drive, 8, list_drives);
+
+        // Files List
+        read_list:= GList(win_file, 2, 5, GEDIT, selected_list, 8, Length(list_files), list_files);
+        if (read_list <> XESC) then
+        begin
+            selected_list := read_list;
+            selected_file:= list_files[selected_list - 1];
+            tmp:= Length(selected_file);
+            SetLength(selected_file, FILE_SIZE);
+            FillChar(@selected_file[tmp + 1], FILE_SIZE - tmp, CHSPACE );
+            WPrint(win_file, 8, 2, WOFF, selected_file);
+        end;
+        GList(win_file, 2, 5, GDISP, selected_list, 8, Length(list_files), list_files);
 
         // Buttons to confirm
         bM := GButton(win_file, 19, 11, GVERT, GEDIT, 2, buttons);    
@@ -82,7 +104,7 @@ begin
     if bM = 1 then
     begin
         Result:=true;
-        GAlert('Processing...');
+        GAlert(Concat(Concat('Processing...', list_drives[selected_drive - 1]), selected_file));
     end;
 
       WClose(win_file);
@@ -163,7 +185,7 @@ begin
     bVp := bV;
 
     // Open window & draw form
-    bW1 := WOpen(2, 4, 36, 18, WOFF);
+    bW1 := WOpen(2, 3, 36, 18, WOFF);
     WOrn(bW1, WPTOP, WPLFT, 'Input Form');
     WOrn(bW1, WPTOP, WPRGT, 'Edit');
     WOrn(bW1, WPBOT, WPLFT, cF);
@@ -212,7 +234,7 @@ begin
 
         // ----- Spinner Input -----
         bV := GSpin(bW1, 8, 6, 0, 100, bVp, GEDIT);
-        if (bV <> XESC) and (bV <> XTAB) then
+        if (bV <> XESC) then
         begin
             bVp := bV;
         end;
@@ -225,7 +247,7 @@ begin
         bRA := GRadio(bW1, 2, 9, GHORZ, GEDIT, bRAp, 3, prA);
 
         // If not bypass, set previous selected value
-        if (bRA <> XESC) and (bRA <> XTAB) then
+        if (bRA <> XESC) then
         begin
             bRAp := bRA;
         end;
@@ -237,7 +259,7 @@ begin
         bRB := GRadio(bW1, 2, 12, GVERT, GEDIT, bRBp, 3, prB);
 
         // If not bypass, set previous selected value
-        if (bRB <> XESC) and (bRB <> XTAB) then
+        if (bRB <> XESC) then
         begin
             bRBp := bRB;
         end;
@@ -250,7 +272,7 @@ begin
         WOrn(bW1, WPBOT, WPLFT, cX);
 
         // Stay on this check until ESC, TAB, or set
-        repeat
+        // repeat
             // Display button and get choice
             bCha := GCheck(bW1, 21, 12, GEDIT, bChap);
 
@@ -259,31 +281,31 @@ begin
             begin
                 bChap := bCha;
             end;
-        until (bCha = XESC) or (bCha = XTAB);
+        // until (bCha = XESC) or (bCha = XTAB) or (bCha = XNONE);
 
         // Stay on this check until ESC, TAB, or set
-        repeat
+        // repeat
             // Display button and get choice
             bChb := GCheck(bW1, 21, 13, GEDIT, bChbp);
 
             // If not ESC or TAB, set previous value
-            if (bChb <> XESC) and (bChb <> XTAB) then
+            if (bChb <> XESC) then
             begin
                 bChbp := bChb;
             end;
-        until (bChb = XESC) or (bChb = XTAB);
+        // until (bChb = XESC) or (bChb = XTAB) or (bCha = XNONE);
 
         // Stay on this check until ESC, TAB, or set
-        repeat
+        // repeat
             // Display button and get choice
             bChc := GCheck(bW1, 21, 14, GEDIT, bChcp);
 
             // If not ESC or TAB, set previous value
-            if (bChc <> XESC) and (bChc <> XTAB) then
+            if (bChc <> XESC) then
             begin
                 bChcp := bChc;
             end;
-        until (bChc = XESC) or (bChc = XTAB);
+        // until (bChc = XESC) or (bChc = XTAB) or (bCha = XNONE);
 
         // Set footer
         WOrn(bW1, WPBOT, WPLFT, cF);
@@ -356,7 +378,7 @@ begin
         // Wait 1 second
         Delay(1000);
     end;
-
+    WClr(bW1);
     GAlert(' Press a key to continue. ');
 
     // Close windows
@@ -457,7 +479,7 @@ begin
         case bC of
             1: FileInput;
             2: FormInput;
-            3: ProgTest;
+            3: if GConfirm('Are you sure?') then ProgTest;
             4:  begin
                     bE := true;
                     bD := true;

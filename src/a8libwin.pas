@@ -9,6 +9,8 @@
 //          -Type byte is synonymous with unsigned char (a8defines.pas)
 // Depends: a8libstr.pas
 // Revised:
+// - Added WDiv function
+// - Added WClr function
 // --------------------------------------------------
 unit a8libwin;
 
@@ -18,7 +20,10 @@ interface
 // Includes
 // --------------------------------------------------
 uses
-    Crt, SysUtils, a8defines, a8defwin, a8libstr;
+    a8defines, a8defwin;
+
+var
+    baW: td_wnrec;
 
 // --------------------------------------------------
 // Function Prototypes
@@ -32,12 +37,16 @@ function WPos(bN, x, y: Byte): Byte;
 function WPut(bN: Byte; x: Char): Byte;
 function WPrint(bN, x, y, bI: Byte; pS: string): Byte;
 function WOrn(bN, bT, bL: Byte; pS: string): Byte;
+function WDiv(bN, y, bD: Byte): Byte;
+function WClr(bN: Byte): Byte;
 
 
 implementation
 
+uses
+    Crt, SysUtils, a8libstr;
+ 
 var
-    baW: td_wnrec;
     vCur: td_wnpos;
 
     // Window handle and memory storage
@@ -495,5 +504,116 @@ begin
     end;
 end;
 
+// --------------------------------------------------
+// Function: WDiv(bN: Byte, y: Byte, bD: Byte): Byte
+// Desc....: Add or remove divider
+// Param...: bN = window handle number
+//            y = Which row for divider
+//           bD = Display On/Off flag
+// Returns.: 0 if success
+//           >100 on error
+// --------------------------------------------------
+function WDiv(bN, y, bD: Byte): Byte;
+var 
+    bR : Byte = WENOPN;
+    bS, bL : Byte;
+    cS: Word;
+    cL: String[41];
+
+begin
+    // Only if window open
+    if (baW.bU[bN] = WON) then
+    begin
+        // Get window width
+        bS := baW.bW[bN];
+
+        // Create divider string
+
+        // If turning on, set ornaments
+        if (bD = WON) then
+        begin
+            // Set solid line
+            FillChar(cL, bS, 82);
+            cL[1] := char(65);
+            cL[bS] := char(68);
+        end
+        else begin
+            // Set blank line
+            FillChar(cL, bS, 0);
+            cL[1] := char(124);
+            cL[bS] := char(124);
+        end;
+
+        // If inverse flag, flip line
+        if (baW.bI[bN] = WON) then
+        begin
+            for bL := 1 to bS do
+            begin
+                cL[bL] := Char(Byte(cL[bL]) xor 128);    
+            end;
+        end;
+
+        // Find location on screen
+        cS := DPeek(RSCRN) + ((baW.bY[bN] + y) * 40) + baW.bX[bN];
+
+        // Move to screen
+        Move(@cL[1], Pointer(cS), bS);
+
+
+        // Set valid return
+        bR := 0;
+    end;
+
+    Result := bR;
+end;
+
+// --------------------------------------------------
+// Function: WClr(bN: Byte): Byte
+// Desc....: Clears window contents
+// Param...: bN = window handle number
+// Returns.: 0 if success
+//           >100 on error
+// --------------------------------------------------
+function WClr(bN: Byte): Byte;
+
+var
+    bR : Byte = WENOPN;
+    bS, bL : Byte;
+    cS: Word;
+    cL: String[40 - 2];
+
+begin
+    // Only if window in use
+    if (baW.bU[bN] = WON) then
+    begin
+        // Find top left corner of window in screen memory (inside frame)
+        cS := DPeek(RSCRN) + (baW.bY[bN] * 40) + baW.bX[bN] + 41;
+
+        // Determine width (minus frames)
+        bS := baW.bW[bN] - 2;
+
+        // Set blank line
+        FillChar(cL, bS, 0);
+
+
+        // If window is inverse, flip line
+        if (baW.bI[bN] = WON) then
+        begin
+            StrInv(cL, bS);
+        end;
+
+        // Clear window line by line
+        for bL := 1 to baW.bH[bN] - 2 do
+        begin
+            Move(@cL[1], Pointer(cS), bS);
+            Inc(cS, 40);    
+        end;
+
+        // Set valid return
+        bR := 0;
+    end;
+
+    Result := bR;
+end;
 
 end.
