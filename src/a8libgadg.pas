@@ -456,7 +456,6 @@ end;
 //          bI = Initial selected option
 //          bV = Size of the List to display
 //          bS = Number of items in the List
-//           l = Label showed for the list
 //          pS = Pointer to array of list option strings
 // ------------------------------------------------------------
 function GList(bN, x, y, bE, bI, bV, bS: Byte; pS: TStringArray): Byte;
