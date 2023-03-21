@@ -447,7 +447,7 @@ begin
 end;
 
 // ------------------------------------------------------------
-// Func...: GList(bN, x, y, bE, bI, bS: Byte; pS: TStringArray): Byte;
+// Func...: GList(bN, x, y, bE, bI, bV, bS: Byte; pS: TStringArray): Byte;
 // Desc...: Display list and get choice
 // Param..: bN = Window handle number
 //           x = Column of window to place list
