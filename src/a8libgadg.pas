@@ -527,15 +527,15 @@ begin
             if (bK = KLEFT) or (bK = KPLUS) or (bK = KUP) or (bK = KMINUS) then
             begin
                 // // Decrement and check for underrun
-                if (bC < bS - 1) then Inc(bC);
-                if (bC > bStart + bV - 1) then Inc(bStart); 
+                if (bC > 0) then Dec(bC);
+                if (bC < bStart) then Dec(bStart) 
             end
             // Down or right
             else if (bK = KRIGHT) or (bK = KASTER) or (bK = KDOWN) or (bK = KEQUAL) then
             begin
                 // // Increment and check for overrun
-                if (bC > 0) then Dec(bC);
-                if (bC < bStart) then Dec(bStart)
+                if (bC < bS - 1) then Inc(bC);
+                if (bC > bStart + bV - 1) then Inc(bStart);
             end
             // ESC
             else if bK = KESC then
