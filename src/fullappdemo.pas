@@ -10,7 +10,7 @@
 
 // Pull in include files
 uses
-    Crt, a8defines, a8defwin, a8libmisc, a8libstr, a8libwin, a8libgadg, a8libmenu;
+    crt, sysutils, a8defines, a8defwin, a8libmisc, a8libstr, a8libwin, a8libgadg, a8libmenu;
 
 // Variables
 var
@@ -83,6 +83,11 @@ begin
                     GList(win_file, 2, 5, GDISP, selected_list, 8, Length(list_files), list_files);
                 end;
             end; 
+        end
+        else if (read_file = XESC) then 
+        begin
+            bM:= XESC;
+            break;
         end;
 
         // Drives combo
@@ -90,7 +95,13 @@ begin
         if (read_drive <> XESC) then
         begin
             selected_drive := read_drive;
+        end
+        else if (read_drive = XESC) then 
+        begin
+            bM:= XESC;
+            break;
         end;
+
         GCombo(win_file, 21, 5, GDISP, selected_drive, 8, list_drives);
 
         // Files List
@@ -103,7 +114,13 @@ begin
             SetLength(selected_file, FILE_SIZE);
             FillChar(@selected_file[tmp + 1], FILE_SIZE - tmp, CHSPACE );
             WPrint(win_file, 8, 2, WOFF, selected_file);
+        end
+        else if (read_list = XESC) then 
+        begin
+            bM:= XESC;
+            break;
         end;
+
         GList(win_file, 2, 5, GDISP, selected_list, 8, Length(list_files), list_files);
 
         // Buttons to confirm
@@ -248,6 +265,11 @@ begin
         if (bV <> XESC) then
         begin
             bVp := bV;
+        end
+        else if (bV = XESC) then 
+        begin
+            bM:= XESC;
+            break;
         end;
 
         // ----- Display Radio Buttons - horizontal -----
@@ -261,6 +283,11 @@ begin
         if (bRA <> XESC) then
         begin
             bRAp := bRA;
+        end
+        else if (bRA = XESC) then 
+        begin
+            bM:= XESC;
+            break;
         end;
 
         // Redisplay buttons
@@ -273,6 +300,11 @@ begin
         if (bRB <> XESC) then
         begin
             bRBp := bRB;
+        end
+        else if (bRB = XESC) then 
+        begin
+            bM:= XESC;
+            break;
         end;
 
         // Redisplay buttons
@@ -291,6 +323,11 @@ begin
             if (bCha <> XESC) and (bCha <> XTAB) then
             begin
                 bChap := bCha;
+            end
+            else if (bCha = XESC) then 
+            begin
+                bM:= XESC;
+                break;
             end;
         // until (bCha = XESC) or (bCha = XTAB) or (bCha = XNONE);
 
@@ -303,6 +340,11 @@ begin
             if (bChb <> XESC) then
             begin
                 bChbp := bChb;
+            end
+            else if (bChb = XESC) then 
+            begin
+                bM:= XESC;
+                break;
             end;
         // until (bChb = XESC) or (bChb = XTAB) or (bCha = XNONE);
 
@@ -315,6 +357,11 @@ begin
             if (bChc <> XESC) then
             begin
                 bChcp := bChc;
+            end
+            else if (bChc = XESC) then 
+            begin
+                bM:= XESC;
+                break;
             end;
         // until (bChc = XESC) or (bChc = XTAB) or (bCha = XNONE);
 
