@@ -504,6 +504,7 @@ begin
     end;
 end;
 
+
 // --------------------------------------------------
 // Function: WDiv(bN: Byte, y: Byte, bD: Byte): Byte
 // Desc....: Add or remove divider

@@ -484,7 +484,7 @@ begin
         // Set drawing position
         xp := 0;
         yp := 0;
-        bEnd := Min(bStart + bV - 1, bS - 1);
+        bEnd := WMin(bStart + bV - 1, bS - 1);
         
         for bL := 0 to bS - 1 do
         begin

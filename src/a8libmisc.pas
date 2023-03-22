@@ -25,7 +25,7 @@ uses
 // --------------------------------------------------
 function IKC2ATA(bN: Byte): Byte;
 function WaitKCX(bI: Byte): Word;
-function Min(x, y: Byte): Byte;
+function WMin(x, y: Byte): Byte;
 
 implementation
 
@@ -140,9 +140,9 @@ begin
     Poke(KEYPCH, KNONE);
 end;
 
-function Min(x, y: Byte): Byte;
+function WMin(x, y: Byte): Byte;
 (*
-@description: Min returns the smallest value of X and Y.
+@description: WMin returns the smallest value of X and Y.
 
 *)
 begin

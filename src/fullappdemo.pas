@@ -43,7 +43,7 @@ var
     selected_list: Byte;
     read_list: Byte;
     bM: Byte;
-    tmp: Byte;    
+    i, tmp: Byte;    
 
 begin
     Result:= false;
@@ -56,7 +56,7 @@ begin
     FillChar(@selected_file[tmp + 1], FILE_SIZE - tmp, CHSPACE );
     
     win_file:=WOpen(5, 4, 30, 16, WOFF);
-    WOrn(win_file, WPTOP, WPLFT, 'Choose file');
+    WOrn(win_file, WPTOP, WPLFT, 'Choose a file');
 
 
     WPrint(win_file, 2, 2, WOFF, 'File:');
@@ -73,6 +73,17 @@ begin
 
         // file
         read_file:= GInput(win_file, 8, 2, GFILE, 12, selected_file);
+        if (read_file <> XESC) then
+        begin
+            for i:=0 to Length(list_files) - 1 do
+            begin
+                if list_files[i] = Trim(selected_file) then
+                begin
+                    selected_list:= i + 1;
+                    GList(win_file, 2, 5, GDISP, selected_list, 8, Length(list_files), list_files);
+                end;
+            end; 
+        end;
 
         // Drives combo
         read_drive:= GCombo(win_file, 21, 5, GEDIT, selected_drive, 8, list_drives);

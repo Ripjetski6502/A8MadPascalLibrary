@@ -66,23 +66,7 @@ begin
     // Process each element
     for bL := 0 to bS - 1 do
     begin
-        if (pS^ >= 0) and (pS^ <= 31) then
-        begin
-            pS^ := pS^ + 64;
-        end
-        else if (pS^ >= 32) and (pS^ <= 95) then
-        begin
-            pS^ := pS^ - 32;
-        end
-        else if (pS^ >= 128) and (pS^ <= 159) then
-        begin
-            pS^ := pS^ + 64;
-        end
-        else if (pS^ >= 160) and (pS^ <= 223) then
-        begin
-            pS^ := pS^ - 32;
-        end;
-
+        pS^ := byte(ata2int(char(pS^)));
         // Increment pointer to next char
         Inc(pS);
     end;
