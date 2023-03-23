@@ -78,17 +78,9 @@ end;
 // Desc...: Converts byte from ATASCII code to internal code
 // Param..: bC = byte to convert
 // ------------------------------------------------------------
-procedure StrAI(pS: PByte; bS: Byte);
-var
-    bL: Byte;
+function CharAI(bC: Byte): Byte;
 begin
-    // Process each element
-    for bL := 0 to bS - 1 do
-    begin
-        pS^ := byte(ata2int(char(pS^)));
-        // Increment pointer to next char
-        Inc(pS);
-    end;
+     Result := byte(ata2int(char(bC)));
 end;
 
 
