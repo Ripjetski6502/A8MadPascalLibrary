@@ -584,7 +584,7 @@ begin
     bC := bI;
 
     // calculate lenght of longeest string in pS
-    for i := 0 to Length(pS) - 1 do
+    for i := 0 to bS - 1 do
     begin
         bA:= Length(pS[i]);
         if bA > bL then bL:= bA;
@@ -649,7 +649,7 @@ begin
                 if not bM then
                 begin
                     // calculating position based on parent window
-                    bZ:=WOpen(baW.bX[bN] + x - 1, baW.bY[bN] + y + 1, 5, 10, WOFF);
+                    bZ:=WOpen(baW.bX[bN] + x - 1, baW.bY[bN] + y + 1, bA, bS + 2, WOFF);
 
                     bC:=MenuV(bZ, 1, 1, WON, bC, bS, pS);
                     WClose(bZ);
