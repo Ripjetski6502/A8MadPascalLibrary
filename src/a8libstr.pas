@@ -78,26 +78,16 @@ end;
 // Desc...: Converts byte from ATASCII code to internal code
 // Param..: bC = byte to convert
 // ------------------------------------------------------------
-function CharAI(bC: Byte): Byte;
+procedure StrAI(pS: PByte; bS: Byte);
+var
+    bL: Byte;
 begin
-    if (bC >= 0) and (bC <= 31) then
+    // Process each element
+    for bL := 0 to bS - 1 do
     begin
-        Result := bC + 64;
-    end
-    else if (bC >= 32) and (bC <= 95) then
-    begin
-        Result := bC - 32;
-    end
-    else if (bC >= 128) and (bC <= 159) then
-    begin
-        Result := bC + 64;
-    end
-    else if (bC >= 160) and (bC <= 223) then
-    begin
-        Result := bC - 32;
-    end
-    else begin
-        Result := bC;
+        pS^ := byte(ata2int(char(pS^)));
+        // Increment pointer to next char
+        Inc(pS);
     end;
 end;
 
