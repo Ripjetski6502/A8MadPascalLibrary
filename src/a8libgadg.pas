@@ -649,7 +649,7 @@ begin
                 if not bM then
                 begin
                     // calculating position based on parent window
-                    bZ:=WOpen(baW.bX[bN] + x - 1, baW.bY[bN] + y + 1, bA, bS + 2, WOFF);
+                    bZ:=WOpen(baW.bX[bN] + x - 1, baW.bY[bN] + y + 1, bL + 2, bS + 2, WOFF);
 
                     bC:=MenuV(bZ, 1, 1, WON, bC, bS, pS);
                     WClose(bZ);
