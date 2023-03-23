@@ -256,10 +256,29 @@ begin
 
         // Edit fields
         bA := GInput(bW1, 8, 2, GNUMER, 27, cA);
+        if (bA = XESC) then
+        begin
+            bM:= XESC;
+            break;
+        end;
         bB := GInput(bW1, 8, 3, GALPHA, 27, cB);
+        if (bB = XESC) then
+        begin
+            bM:= XESC;
+            break;
+        end;
         bC := GInput(bW1, 8, 4, GALNUM, 27, cC);
+        if (bC = XESC) then
+        begin
+            bM:= XESC;
+            break;
+        end;
         bD := GInput(bW1, 8, 5, GANY, 27, cD);
-
+        if (bD = XESC) then
+        begin
+            bM:= XESC;
+            break;
+        end;
         // ----- Spinner Input -----
         bV := GSpin(bW1, 8, 6, 0, 100, bVp, GEDIT);
         if (bV <> XESC) then
