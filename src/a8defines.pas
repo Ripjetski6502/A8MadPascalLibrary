@@ -14,7 +14,7 @@ interface
 
 const
     // Version
-    LIB_VERSION = '1.1.2';
+    LIB_VERSION = '1.1.3';
 
     // Window Record and Memory Alloc
     WRECSZ = 10;
@@ -164,10 +164,11 @@ const
     CHDELLN = #156;
     CHINVSP = #160;
     CHBUZ   = #253;
-    CHRGT_I = #159;
     CHO_L   = #111;
-    CHI_I   = #201;
     CHDN_I  = #157;
+    CHRGT_I = #159;
+    CHI_I   = #201;
+    
 
 implementation
 

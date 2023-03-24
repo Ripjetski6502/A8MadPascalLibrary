@@ -100,7 +100,7 @@ end;
 procedure WBack(bN: Byte);
 begin
     // Fill screen memory with char
-    FillChar(Pointer(DPeek(RSCRN)), 960, bN);
+    FillChar(Pointer(DPeek(RSCRN)), 960, ata2int(char(bN)));
 end;
 
 
