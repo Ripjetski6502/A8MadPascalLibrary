@@ -14,7 +14,7 @@ interface
 
 const
     // Version
-    LIB_VERSION = '1.1.3';
+    LIB_VERSION = '1.2.0';
 
     // Window Record and Memory Alloc
     WRECSZ = 10;
@@ -56,41 +56,41 @@ const
     XNONE = 255;
 
     // OS Registers
-    DMACTL = 559;
-    COLDST = 580;
-    GPRIOR = 623;
+    // DMACTL = 559;
+    // COLDST = 580;
+    // GPRIOR = 623;
     INVFLG = 694;
     SHFLOK = 702;
     HELPFG = 732;
     KEYPCH = 764;
-    GRACTL = 53277;
+    // GRACTL = 53277;
     CONSOL = 53279;
-    PMBASE = 54279;
+    // PMBASE = 54279;
 
     // PM Registers
-    HPOSP0 = 53248;
-    HPOSP1 = 53249;
-    HPOSP2 = 53250;
+    // HPOSP0 = 53248;
+    // HPOSP1 = 53249;
+    // HPOSP2 = 53250;
 
     // Screen Bits
     ALMARG = 82;
     RSCRN  = 88;
-    PCOLR0 = 704;
-    PCOLR1 = 705;
-    PCOLR2 = 706;
-    PCOLR3 = 707;
-    AFOREG = 709;
-    ABACKG = 710;
-    ABORDR = 712;
+    // PCOLR0 = 704;
+    // PCOLR1 = 705;
+    // PCOLR2 = 706;
+    // PCOLR3 = 707;
+    // AFOREG = 709;
+    // ABACKG = 710;
+    // ABORDR = 712;
     ACURIN = 752;
 
     // Colors
-    CBLACK  = 0;
-    CWHITE  = 14;
-    CGREEN  = 210;
-    CBLUE   = 146;
-    CRED    = 50;
-    CYELLOW = 222;
+    // CBLACK  = 0;
+    // CWHITE  = 14;
+    // CGREEN  = 210;
+    // CBLUE   = 146;
+    // CRED    = 50;
+    // CYELLOW = 222;
 
     // Keystroke Values
     KNOMAP = 199;
