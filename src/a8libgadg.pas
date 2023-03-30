@@ -651,7 +651,7 @@ begin
                     // calculating position based on parent window
                     bZ:=WOpen(baW.bX[bN] + x - 1, baW.bY[bN] + y + 1, bL + 2, bS + 2, WOFF);
 
-                    bC:=MenuV(bZ, 1, 1, WON, bC, bS, pS);
+                    bC:=WMenu(bZ, 1, 1, GVERT, WON, bC, bS, pS);
                     WClose(bZ);
                     bM := true;
 

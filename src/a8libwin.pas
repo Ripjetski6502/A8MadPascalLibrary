@@ -73,7 +73,7 @@ begin
     cpWM := baWM;
 
     // Work on 10 window+system handles
-    for bL := 0 to 10 do
+    for bL := 0 to WRECSZ do
     begin
         // Clear window handle record vars
         baW.bU[bL] := WOFF;
@@ -127,7 +127,7 @@ begin
     Result := WENONE;
 
     // Cycle through handles (exluding system)
-    for bL := 0 to 10 do
+    for bL := 0 to WRECSZ do
     begin
         // If handle is not in use
         if baW.bU[bL] = WOFF then

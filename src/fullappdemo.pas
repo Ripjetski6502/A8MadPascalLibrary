@@ -514,7 +514,7 @@ begin
     while not bD do
     begin
         // Display menu and get choice
-        bC := MenuV(bW1, 1, 1, WOFF, bC, 3, pcM);
+        bC := WMenu(bW1, 1, 1, GVERT, WOFF, bC, 3, pcM);
 
         // Process choice
         case bC of
@@ -550,7 +550,7 @@ begin
     while not bD do
     begin
         // Display menu and get choice
-        bC := MenuV(bW1, 1, 1, WON, bC, 4, pcM);
+        bC := WMenu(bW1, 1, 1, GVERT, WON, bC, 4, pcM);
 
         // Process choice
         case bC of
@@ -574,7 +574,7 @@ begin
     bC := 1;
     // Setup screen
     WInit;
-    WBack(14);
+    WBack($2E);
 
     // Open menu window
     bW1 := WOpen(0, 0, 40, 3, WOFF);
@@ -588,7 +588,7 @@ begin
     while not bE do
     begin
         // Call menu
-        bC := MenuH(bW1, 1, 1, WON, bC, 3, pcM);
+        bC := WMenu(bW1, 1, 1, GHORZ, WON, bC, 3, pcM);
 
         // Process choice
         case bC of
