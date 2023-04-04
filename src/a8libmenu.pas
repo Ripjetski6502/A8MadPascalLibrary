@@ -132,7 +132,7 @@ begin
         Move(@tmpStr[1], @cL[1], Length(cL));
         
         if bO = GHORZ then
-            WPrint(bN, pos + bL - 1, y,  WOFF, cL)
+            WPrint(bN, pos + bL - 1, y, WOFF, cL)
         else
             WPrint(bN, x, y + bL - 1, WOFF, cL);
     end;
