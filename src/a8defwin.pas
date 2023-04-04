@@ -27,7 +27,7 @@ type
         vX, vY: Byte;
     end;
 
-    TStringArray = array[0..0] of string;
+    TStringArray = array[0..0] of String[40];
 
 implementation
 

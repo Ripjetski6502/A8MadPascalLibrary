@@ -35,8 +35,8 @@ function WClose(bN: Byte): Byte;
 function WStat(bN: Byte): Byte;
 function WPos(bN, x, y: Byte): Byte;
 function WPut(bN: Byte; x: Char): Byte;
-function WPrint(bN, x, y, bI: Byte; pS: string): Byte;
-function WOrn(bN, bT, bL: Byte; pS: string): Byte;
+function WPrint(bN, x, y, bI: Byte; pS: string[38]): Byte;
+function WOrn(bN, bT, bL: Byte; pS: string[38]): Byte;
 function WDiv(bN, y, bD: Byte): Byte;
 function WClr(bN: Byte): Byte;
 
@@ -364,7 +364,7 @@ end;
 //           >100 on error
 // Notes...: Test will automatically be inverse if window is inverse.
 // --------------------------------------------------
-function WPrint(bN, x, y, bI: Byte; pS: string): Byte;
+function WPrint(bN, x, y, bI: Byte; pS: string[38]): Byte;
 var
     bL, tmp: Byte;
     cS: Word;
@@ -440,7 +440,7 @@ end;
 //           >100 on error
 // Notes...: Max 36 for frame and bookends
 // --------------------------------------------------
-function WOrn(bN, bT, bL: Byte; pS: string): Byte;
+function WOrn(bN, bT, bL: Byte; pS: string[38]): Byte;
 var
     bS: Byte;
     cS: Word;
